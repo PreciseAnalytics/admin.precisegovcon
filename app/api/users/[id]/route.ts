@@ -8,10 +8,10 @@ const updateUserSchema = z.object({
   email: z.string().email().optional(),
   name: z.string().optional(),
   company: z.string().optional(),
-  phone: z.string().optional(),
   plan_tier: z.string().optional(),
   plan_status: z.string().optional(),
 });
+
 
 export async function GET(
   request: NextRequest,
@@ -27,7 +27,6 @@ export async function GET(
         email: true,
         name: true,
         company: true,
-        phone: true,
         plan: true,
         plan_tier: true,
         plan_status: true,
@@ -35,7 +34,6 @@ export async function GET(
         updated_at: true,
         stripe_customer_id: true,
         stripe_subscription_id: true,
-        stripe_price_id: true,
       },
     });
 
