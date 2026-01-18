@@ -31,7 +31,6 @@ export async function createAuditLog(data: AuditLogData): Promise<void> {
         changesAfter: data.changesAfter || null,
         ipAddress,
         userAgent,
-        requiresApproval: data.requiresApproval || false,
         success: data.success ?? true,
         errorMessage: data.errorMessage || null,
       },
