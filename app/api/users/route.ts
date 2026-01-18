@@ -53,6 +53,9 @@ export async function GET(request: NextRequest) {
           stripe_subscription_id: true,
           created_at: true,
           updated_at: true,
+          last_login_at: true,
+          is_active: true,
+          is_suspended: true,
         },
         orderBy: {
           created_at: 'desc',
@@ -61,13 +64,27 @@ export async function GET(request: NextRequest) {
       prisma.user.count({ where }),
     ]);
 
+    // Transform the data to match frontend expectations
+    const transformedUsers = users.map(user => ({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      companyName: user.company,
+      subscriptionTier: user.plan_tier || 'FREE',
+      subscriptionStatus: user.plan_status || 'INACTIVE',
+      isActive: user.is_active ?? true,
+      isSuspended: user.is_suspended ?? false,
+      createdAt: user.created_at.toISOString(),
+      lastLoginAt: user.last_login_at?.toISOString() || null,
+    }));
+
     return NextResponse.json({
-      users,
+      users: transformedUsers,
       pagination: {
         total,
         page,
         limit,
-        pages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / limit),
       },
     });
   } catch (error) {
