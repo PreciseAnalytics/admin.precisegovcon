@@ -1,0 +1,86 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { 
+  checkIPWhitelist, 
+  verifyPassword, 
+  createToken, 
+  setAuthCookie,
+  getClientIP 
+} from '@/lib/auth';
+import prisma from '@/lib/prisma';
+
+export async function POST(request: NextRequest) {
+  try {
+    const clientIP = getClientIP(request);
+
+    if (!checkIPWhitelist(clientIP)) {
+      console.log(`Login attempt from unauthorized IP: ${clientIP}`);
+      return NextResponse.json(
+        { error: 'Access denied from your IP address' },
+        { status: 403 }
+      );
+    }
+
+    const body = await request.json();
+    const { email, password } = body;
+
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: 'Email and password are required' },
+        { status: 400 }
+      );
+    }
+
+    const user = await prisma.adminUser.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        password: true,
+        role: true,
+      },
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Invalid email or password' },
+        { status: 401 }
+      );
+    }
+
+    const isValidPassword = await verifyPassword(password, user.password);
+    if (!isValidPassword) {
+      return NextResponse.json(
+        { error: 'Invalid email or password' },
+        { status: 401 }
+      );
+    }
+
+    const token = createToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    // CRITICAL: Must await this!
+    await setAuthCookie(token);
+
+    console.log('✅ Login successful for:', user.email);
+
+    return NextResponse.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    return NextResponse.json(
+      { error: 'An error occurred during login' },
+      { status: 500 }
+    );
+  }
+}

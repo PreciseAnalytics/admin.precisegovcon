@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String
+  password  String
+  role      AdminRole  @default(ADMIN)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  auditLogs AuditLog[]
+
+  @@map("admin_users")
+}
+
+model User {
+  id                     String    @id @default(cuid())
+  email                  String    @unique
+  name                   String?
+  company                String?
+  plan                   String?
+  plan_status            String?
+  plan_tier              String?
+  stripe_customer_id     String?   @unique
+  stripe_subscription_id String?   @unique
+  created_at             DateTime  @default(now())
+  updated_at             DateTime  @updatedAt
+  password               String?
+  last_login_at          DateTime?
+  is_active              Boolean?  @default(true)
+  is_suspended           Boolean?  @default(false)
+
+  @@index([email])
+  @@index([stripe_customer_id])
+  @@index([plan_status])
+  @@index([plan_tier])
+  @@map("users")
+}
+
+model AuditLog {
+  id            String    @id @default(cuid())
+  adminUserId   String
+  action        String
+  entityType    String
+  entityId      String?
+  changesBefore Json?
+  changesAfter  Json?
+  ipAddress     String?
+  userAgent     String?
+  success       Boolean   @default(true)
+  errorMessage  String?
+  createdAt     DateTime  @default(now())
+  adminUser     AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  VIEWER
+}
+
+enum PlanStatus {
+  ACTIVE
+  INACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  UNPAID
+}
+
+enum PlanTier {
+  FREE
+  BASIC
+  PROFESSIONAL
+  ENTERPRISE
+}
