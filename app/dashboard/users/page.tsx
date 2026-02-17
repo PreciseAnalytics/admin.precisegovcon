@@ -14,8 +14,10 @@ import {
   XCircle,
   ChevronLeft,
   ChevronRight,
+  UserPlus,
 } from 'lucide-react';
 import { formatDate, formatRelativeTime, getStatusColor } from '@/lib/utils';
+import AddUserModal from '@/components/AddUserModal';
 
 interface User {
   id: string;
@@ -40,6 +42,7 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -93,9 +96,7 @@ export default function UsersPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          isSuspended: !currentlySuspended,
-          suspendedAt: !currentlySuspended ? new Date().toISOString() : null,
-          suspendedReason: !currentlySuspended ? 'Suspended by admin' : null,
+          is_suspended: !currentlySuspended,
         }),
       });
 
@@ -122,11 +123,20 @@ export default function UsersPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 mb-2">Users</h1>
-        <p className="text-slate-600">
-          Manage all user accounts and subscriptions ({total.toLocaleString()} total)
-        </p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">Users</h1>
+          <p className="text-slate-600">
+            Manage all user accounts and subscriptions ({total.toLocaleString()} total)
+          </p>
+        </div>
+        <button
+          onClick={() => setShowAddUserModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
+        >
+          <UserPlus className="w-5 h-5" />
+          Add User
+        </button>
       </div>
 
       {/* Filters */}
@@ -161,9 +171,10 @@ export default function UsersPage() {
               <option value="">All Statuses</option>
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
-              <option value="TRIAL">Trial</option>
-              <option value="CANCELLED">Cancelled</option>
+              <option value="TRIALING">Trialing</option>
               <option value="PAST_DUE">Past Due</option>
+              <option value="CANCELED">Canceled</option>
+              <option value="UNPAID">Unpaid</option>
             </select>
           </div>
 
@@ -325,6 +336,12 @@ export default function UsersPage() {
           </div>
         </div>
       </div>
+
+      <AddUserModal
+        isOpen={showAddUserModal}
+        onClose={() => setShowAddUserModal(false)}
+        onSuccess={() => fetchUsers()}
+      />
     </div>
   );
 }
