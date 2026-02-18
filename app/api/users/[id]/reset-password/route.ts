@@ -1,40 +1,25 @@
-//code app/api/users/[id]/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession, hashPassword } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { logUserUpdate, logUserDeletion } from '@/lib/audit';
+import { logPasswordReset } from '@/lib/audit';
+import { sendEmail } from '@/lib/email';
 import { z } from 'zod';
 
-const updateUserSchema = z.object({
-  email: z.string().email().optional(),
-  name: z.string().optional(),
-  company: z.string().optional(),
-  plan_tier: z.string().optional(),
-  plan_status: z.string().optional(),
+const resetPasswordSchema = z.object({
+  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
-
-export async function GET(
+export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    await requireSession();
+    const session = await requireSession();
+    const body = await request.json();
+    const { newPassword } = resetPasswordSchema.parse(body);
 
     const user = await prisma.user.findUnique({
       where: { id: params.id },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        company: true,
-        plan: true,
-        plan_tier: true,
-        plan_status: true,
-        stripe_customer_id: true,
-        stripe_subscription_id: true,
-      }
     });
 
     if (!user) {
@@ -44,54 +29,57 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ user });
-  } catch (error) {
-    console.error('Error fetching user:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch user' },
-      { status: 500 }
-    );
-  }
-}
+    const hashedPassword = await hashPassword(newPassword);
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = await requireSession();
-    const body = await request.json();
-    const updates = updateUserSchema.parse(body);
-
-    // Get current user data for audit
-    const currentUser = await prisma.user.findUnique({
-      where: { id: params.id },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    // Update user
     const updatedUser = await prisma.user.update({
       where: { id: params.id },
-      data: updates,
+      data: { password: hashedPassword },
     });
 
-    // Log the update
-    await logUserUpdate(
-      session.id,
-      params.id,
-      currentUser,
-      updatedUser
-    );
+    await logPasswordReset(session.id, params.id);
+
+    // Send confirmation email (non-blocking)
+    sendEmail({
+      to: user.email,
+      subject: '🔐 Password Changed Successfully',
+      html: `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: #10b981; color: white; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
+              .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }
+              .info { background: white; padding: 16px; border-radius: 6px; border-left: 4px solid #10b981; margin: 16px 0; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h2 style="margin: 0;">✅ Password Changed</h2>
+              </div>
+              <div class="content">
+                <p>Hello ${user.name || 'User'},</p>
+                <p>Your password has been successfully reset at ${new Date().toLocaleString()}.</p>
+                <div class="info">
+                  <p><strong>If you didn't make this change:</strong> Please contact support immediately.</p>
+                  <p style="margin: 0; color: #666; font-size: 12px;">Support: support@precisegovcon.com</p>
+                </div>
+              </div>
+            </div>
+          </body>
+        </html>
+      `,
+      text: `Your password has been successfully reset.`,
+    }).catch(error => {
+      console.error('Failed to send password reset confirmation email:', error);
+      // Don't fail the request if email fails
+    });
 
     return NextResponse.json({
       success: true,
-      user: updatedUser,
+      message: 'Password reset successfully',
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -101,49 +89,9 @@ export async function PATCH(
       );
     }
 
-    console.error('Error updating user:', error);
+    console.error('Error resetting password:', error);
     return NextResponse.json(
-      { error: 'Failed to update user' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = await requireSession();
-
-    // Get user data for audit before deletion
-    const user = await prisma.user.findUnique({
-      where: { id: params.id },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    // Delete user
-    await prisma.user.delete({
-      where: { id: params.id },
-    });
-
-    // Log deletion
-    await logUserDeletion(session.id, params.id, user);
-
-    return NextResponse.json({
-      success: true,
-      message: 'User deleted successfully',
-    });
-  } catch (error) {
-    console.error('Error deleting user:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete user' },
+      { error: 'Failed to reset password' },
       { status: 500 }
     );
   }

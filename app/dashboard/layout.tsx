@@ -15,12 +15,14 @@ import {
   X,
   Shield,
   BarChart3,
+  Mail,
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Users', href: '/dashboard/users', icon: Users },
   { name: 'Subscriptions', href: '/dashboard/subscriptions', icon: CreditCard },
+  { name: 'Contractor Outreach', href: '/dashboard/outreach', icon: Mail },
   { name: 'Audit Logs', href: '/dashboard/audit-logs', icon: FileText },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },

@@ -6,28 +6,39 @@ import { toast } from 'sonner';
 import {
   Search,
   Filter,
-  Eye,
-  Edit2,
+  UserPlus,
+  Users,
+  Mail,
+  Building,
+  Calendar,
+  CreditCard,
   Trash2,
   Ban,
-  CheckCircle,
-  XCircle,
-  ChevronLeft,
-  ChevronRight,
+  MoreVertical,
+  ChevronDown,
+  TrendingUp,
 } from 'lucide-react';
-import { formatDate, formatRelativeTime, getStatusColor } from '@/lib/utils';
+import { formatDate, getStatusColor, getTierColor } from '@/lib/utils';
+import AddUserModal from '@/components/AddUserModal';
 
 interface User {
   id: string;
   email: string;
   name: string | null;
-  companyName: string | null;
-  subscriptionTier: string;
-  subscriptionStatus: string;
-  isActive: boolean;
-  isSuspended: boolean;
-  createdAt: string;
-  lastLoginAt: string | null;
+  company: string | null;
+  plan_tier: string | null;
+  plan_status: string | null;
+  is_active: boolean;
+  is_suspended: boolean;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+interface Stats {
+  totalUsers: number;
+  activeUsers: number;
+  suspendedUsers: number;
+  paidSubscribers: number;
 }
 
 export default function UsersPage() {
@@ -40,12 +51,18 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [stats, setStats] = useState<Stats>({ totalUsers: 0, activeUsers: 0, suspendedUsers: 0, paidSubscribers: 0 });
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
+    fetchStats();
   }, [page, search, statusFilter, tierFilter]);
 
   const fetchUsers = async () => {
+    setLoading(true);
     try {
       const params = new URLSearchParams({
         page: page.toString(),
@@ -58,9 +75,9 @@ export default function UsersPage() {
       const res = await fetch(`/api/users?${params}`);
       const data = await res.json();
 
-      setUsers(data.users);
-      setTotalPages(data.pagination.totalPages);
-      setTotal(data.pagination.total);
+      setUsers(data.users || []);
+      setTotalPages(data.pagination?.totalPages || 1);
+      setTotal(data.pagination?.total || 0);
     } catch (error) {
       toast.error('Failed to fetch users');
     } finally {
@@ -68,52 +85,102 @@ export default function UsersPage() {
     }
   };
 
-  const handleDelete = async (userId: string, userName: string) => {
-    if (!confirm(`Are you sure you want to delete ${userName || 'this user'}? This action cannot be undone.`)) {
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/users/stats');
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!confirm(`Delete ${userName || 'this user'}? This action cannot be undone.`)) {
       return;
     }
 
     try {
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) throw new Error();
-
-      toast.success('User deleted successfully');
-      fetchUsers();
+      const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('User deleted successfully');
+        fetchUsers();
+      } else {
+        toast.error('Failed to delete user');
+      }
     } catch (error) {
       toast.error('Failed to delete user');
     }
   };
 
-  const handleToggleSuspend = async (userId: string, currentlySuspended: boolean) => {
+  const handleSuspendUser = async (userId: string, userName: string, isSuspended: boolean) => {
+    if (!confirm(`${isSuspended ? 'Unsuspend' : 'Suspend'} ${userName || 'this user'}?`)) {
+      return;
+    }
+
     try {
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          isSuspended: !currentlySuspended,
-          suspendedAt: !currentlySuspended ? new Date().toISOString() : null,
-          suspendedReason: !currentlySuspended ? 'Suspended by admin' : null,
-        }),
+        body: JSON.stringify({ is_suspended: !isSuspended }),
       });
 
-      if (!res.ok) throw new Error();
-
-      toast.success(currentlySuspended ? 'User unsuspended' : 'User suspended');
-      fetchUsers();
+      if (res.ok) {
+        toast.success(`User ${isSuspended ? 'unsuspended' : 'suspended'} successfully`);
+        fetchUsers();
+      } else {
+        toast.error('Failed to update user');
+      }
     } catch (error) {
       toast.error('Failed to update user');
     }
   };
 
-  if (loading) {
+  const getTierBadgeColor = (tier: string | null) => {
+    switch (tier?.toLowerCase()) {
+      case 'enterprise':
+        return 'bg-purple-100 text-purple-800';
+      case 'professional':
+        return 'bg-blue-100 text-blue-800';
+      case 'basic':
+        return 'bg-green-100 text-green-800';
+      default:
+        return 'bg-slate-100 text-slate-800';
+    }
+  };
+
+  const getStatusBadgeColor = (status: string | null) => {
+    switch (status?.toLowerCase()) {
+      case 'active':
+        return 'bg-green-100 text-green-800';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800';
+      case 'trial':
+        return 'bg-orange-100 text-orange-800';
+      case 'past_due':
+        return 'bg-yellow-100 text-yellow-800';
+      default:
+        return 'bg-slate-100 text-slate-800';
+    }
+  };
+
+  if (loading && users.length === 0) {
     return (
       <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-10 bg-slate-200 rounded w-64" />
-          <div className="h-96 bg-slate-200 rounded" />
+        <div className="animate-pulse space-y-6">
+          <div className="h-12 bg-slate-200 rounded w-48" />
+          <div className="grid grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-24 bg-slate-200 rounded" />
+            ))}
+          </div>
+          <div className="space-y-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-32 bg-slate-200 rounded" />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -124,207 +191,308 @@ export default function UsersPage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Users</h1>
-        <p className="text-slate-600">
-          Manage all user accounts and subscriptions ({total.toLocaleString()} total)
-        </p>
+        <p className="text-slate-600">Manage and monitor all platform users</p>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by email, name, or company..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase">Total Users</p>
+              <p className="text-2xl font-bold text-slate-900 mt-1">{stats.totalUsers}</p>
+            </div>
+            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Users className="w-5 h-5 text-blue-600" />
+            </div>
           </div>
+        </div>
 
-          {/* Status Filter */}
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+        <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase">Active Users</p>
+              <p className="text-2xl font-bold text-slate-900 mt-1">{stats.activeUsers}</p>
+            </div>
+            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-green-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase">Suspended</p>
+              <p className="text-2xl font-bold text-slate-900 mt-1">{stats.suspendedUsers}</p>
+            </div>
+            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+              <Ban className="w-5 h-5 text-red-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase">Paid</p>
+              <p className="text-2xl font-bold text-slate-900 mt-1">{stats.paidSubscribers}</p>
+            </div>
+            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+              <CreditCard className="w-5 h-5 text-purple-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="bg-white rounded-lg border border-slate-200 p-4 mb-8">
+        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
+          <div className="flex-1 flex gap-2">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by email, name..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
             <select
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
                 setPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+              className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
             >
-              <option value="">All Statuses</option>
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-              <option value="TRIAL">Trial</option>
-              <option value="CANCELLED">Cancelled</option>
-              <option value="PAST_DUE">Past Due</option>
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="trial">Trial</option>
             </select>
-          </div>
 
-          {/* Tier Filter */}
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <select
               value={tierFilter}
               onChange={(e) => {
                 setTierFilter(e.target.value);
                 setPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+              className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
             >
               <option value="">All Tiers</option>
-              <option value="FREE">Free</option>
-              <option value="BASIC">Basic</option>
-              <option value="PROFESSIONAL">Professional</option>
-              <option value="ENTERPRISE">Enterprise</option>
+              <option value="free">Free</option>
+              <option value="basic">Basic</option>
+              <option value="professional">Professional</option>
+              <option value="enterprise">Enterprise</option>
             </select>
           </div>
+
+          <button
+            onClick={() => setShowAddUserModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition"
+          >
+            <UserPlus className="w-4 h-4" />
+            Add User
+          </button>
         </div>
       </div>
 
-      {/* Users Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  User
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Subscription
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Joined
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Last Active
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {users && users.length > 0 ? (
-                users.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-50 transition">
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className="font-medium text-slate-900">
-                          {user.name || 'No name'}
-                        </div>
-                        <div className="text-sm text-slate-500">{user.email}</div>
-                        {user.companyName && (
-                          <div className="text-xs text-slate-400">{user.companyName}</div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        user.subscriptionTier === 'ENTERPRISE' ? 'bg-purple-100 text-purple-800' :
-                        user.subscriptionTier === 'PROFESSIONAL' ? 'bg-blue-100 text-blue-800' :
-                        user.subscriptionTier === 'BASIC' ? 'bg-green-100 text-green-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {user.subscriptionTier}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(user.subscriptionStatus)}`}>
-                          {user.subscriptionStatus}
-                        </span>
-                        {user.isSuspended && (
-                          <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
-                            SUSPENDED
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {formatDate(user.createdAt)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {formatRelativeTime(user.lastLoginAt)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => router.push(`/dashboard/users/${user.id}`)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                          title="View Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleToggleSuspend(user.id, user.isSuspended)}
-                          className={`p-2 rounded-lg transition ${
-                            user.isSuspended
-                              ? 'text-green-600 hover:bg-green-50'
-                              : 'text-orange-600 hover:bg-orange-50'
-                          }`}
-                          title={user.isSuspended ? 'Unsuspend' : 'Suspend'}
-                        >
-                          {user.isSuspended ? <CheckCircle className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(user.id, user.name || user.email)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                          title="Delete User"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                    No users found
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      {/* Users Grid */}
+      {users.length === 0 ? (
+        <div className="text-center py-16">
+          <Users className="w-16 h-16 mx-auto mb-4 text-slate-300" />
+          <p className="text-slate-500 text-lg">No users found</p>
+          <p className="text-slate-400 text-sm mt-1">Try adjusting your filters or add a new user</p>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {users.map((user) => (
+            <div
+              key={user.id}
+              className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg hover:border-orange-300 transition group cursor-pointer"
+              onClick={() => router.push(`/dashboard/users/${user.id}`)}
+            >
+              {/* Card Header */}
+              <div className="bg-gradient-to-r from-orange-50 to-slate-50 px-6 py-4 border-b border-slate-200 flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-slate-900 truncate hover:text-orange-600 transition cursor-pointer group-hover:text-orange-600">
+                    {user.name || 'Unnamed User'}
+                  </h3>
+                  <p className="text-sm text-slate-600 truncate">{user.email}</p>
+                </div>
+                <div className="relative ml-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenMenuId(openMenuId === user.id ? null : user.id);
+                    }}
+                    className="p-2 hover:bg-white rounded-lg transition text-slate-400 hover:text-slate-600"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
 
-        {/* Pagination */}
-        <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
-          <div className="text-sm text-slate-600">
-            Showing {((page - 1) * 20) + 1} to {Math.min(page * 20, total)} of {total} users
-          </div>
-          <div className="flex items-center gap-2">
+                  {openMenuId === user.id && (
+                    <div className="absolute right-0 top-full mt-1 bg-white rounded-lg border border-slate-200 shadow-lg z-10 min-w-48">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/dashboard/users/${user.id}`);
+                          setOpenMenuId(null);
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 font-medium border-b border-slate-100 text-sm"
+                      >
+                        View Details
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSuspendUser(user.id, user.name || 'User', user.is_suspended);
+                          setOpenMenuId(null);
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-orange-50 text-orange-600 text-sm"
+                      >
+                        <Ban className="w-3.5 h-3.5 inline mr-2" />
+                        {user.is_suspended ? 'Unsuspend' : 'Suspend'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteUser(user.id, user.name || 'User');
+                          setOpenMenuId(null);
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 text-sm"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 inline mr-2" />
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Card Body */}
+              <div className="px-6 py-4 space-y-3">
+                {user.company && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Building className="w-4 h-4 text-slate-400" />
+                    <span className="text-slate-700">{user.company}</span>
+                  </div>
+                )}
+
+                {user.last_login_at && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="w-4 h-4 text-slate-400" />
+                    <span className="text-slate-600">
+                      Last login: {formatDate(user.last_login_at)}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 text-sm">
+                  <Calendar className="w-4 h-4 text-slate-400" />
+                  <span className="text-slate-600">
+                    Joined: {formatDate(user.created_at)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Card Footer - Badges */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex gap-2 flex-wrap">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTierFilter(user.plan_tier || '');
+                    setPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getTierBadgeColor(user.plan_tier)}`}
+                  title="Filter by tier"
+                >
+                  {user.plan_tier?.charAt(0).toUpperCase() + user.plan_tier?.slice(1) || 'Free'}
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStatusFilter(user.plan_status || '');
+                    setPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getStatusBadgeColor(user.plan_status)}`}
+                  title="Filter by status"
+                >
+                  {user.plan_status?.charAt(0).toUpperCase() + user.plan_status?.slice(1) || 'Inactive'}
+                </button>
+
+                {user.is_suspended && (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                    Suspended
+                  </span>
+                )}
+
+                {user.is_active && !user.is_suspended && (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                    Active
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-slate-600">
+            Showing {users.length} of {total} users
+          </p>
+
+          <div className="flex gap-2">
             <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
+              onClick={() => setPage(Math.max(1, page - 1))}
               disabled={page === 1}
-              className="p-2 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium"
             >
-              <ChevronLeft className="w-5 h-5" />
+              Previous
             </button>
-            <span className="px-4 py-2 text-sm font-medium text-slate-700">
-              Page {page} of {totalPages}
-            </span>
+
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const pageNum = i + 1;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`w-10 h-10 rounded-lg font-medium transition ${
+                      page === pageNum
+                        ? 'bg-orange-600 text-white'
+                        : 'border border-slate-300 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+
             <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              onClick={() => setPage(Math.min(totalPages, page + 1))}
               disabled={page === totalPages}
-              className="p-2 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium"
             >
-              <ChevronRight className="w-5 h-5" />
+              Next
             </button>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Add User Modal */}
+      <AddUserModal open={showAddUserModal} onClose={() => setShowAddUserModal(false)} onSuccess={() => fetchUsers()} />
     </div>
   );
 }

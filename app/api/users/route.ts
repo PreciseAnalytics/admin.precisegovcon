@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { createAuditLog } from '@/lib/audit';
+import { sendNewUserWelcomeEmail, sendAdminNewUserNotification } from '@/lib/email';
+import { z } from 'zod';
+
+const createUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
+  company: z.string().optional(),
+  plan_tier: z.string().optional().default('FREE'),
+  plan_status: z.string().optional().default('INACTIVE'),
+});
 
 export async function GET(request: NextRequest) {
   try {
@@ -90,10 +101,93 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching users:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to fetch users',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await requireSession();
+    const body = await request.json();
+    const data = createUserSchema.parse(body);
+
+    // Check for duplicate email
+    const existing = await prisma.user.findUnique({
+      where: { email: data.email },
+    });
+
+    if (existing) {
+      return NextResponse.json(
+        { error: 'A user with this email already exists' },
+        { status: 409 }
+      );
+    }
+
+    const newUser = await prisma.user.create({
+      data: {
+        email: data.email,
+        name: data.name,
+        company: data.company,
+        plan_tier: data.plan_tier,
+        plan_status: data.plan_status,
+        is_active: true,
+        is_suspended: false,
+      },
+    });
+
+    await createAuditLog({
+      adminUserId: session.id,
+      action: 'CREATE_USER',
+      entityType: 'User',
+      entityId: newUser.id,
+      changesAfter: newUser,
+    });
+
+    // Send welcome email to new user (non-blocking)
+    sendNewUserWelcomeEmail(
+      newUser.email,
+      newUser.name || 'User',
+      newUser.plan_tier || 'free'
+    ).catch(error => {
+      console.error('Failed to send welcome email:', error);
+      // Don't fail the request if email fails
+    });
+
+    // Send notification to admin (non-blocking)
+    const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+    if (adminEmail) {
+      sendAdminNewUserNotification(
+        adminEmail,
+        newUser.name || 'Unnamed User',
+        newUser.email,
+        newUser.plan_tier || 'free',
+        newUser.company || undefined
+      ).catch(error => {
+        console.error('Failed to send admin notification:', error);
+        // Don't fail the request if email fails
+      });
+    }
+
+    return NextResponse.json(
+      { success: true, user: newUser },
+      { status: 201 }
+    );
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: error.errors },
+        { status: 400 }
+      );
+    }
+
+    console.error('Error creating user:', error);
+    return NextResponse.json(
+      { error: 'Failed to create user' },
       { status: 500 }
     );
   }

@@ -1,11 +1,21 @@
-//code app/dashboard/subscriptions/page.tsx
-
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CreditCard, Search, Filter, Eye, DollarSign, Calendar, ChevronLeft, ChevronRight, Users } from 'lucide-react';
-import { formatDate, formatCurrency, getStatusColor } from '@/lib/utils';
+import {
+  CreditCard,
+  Search,
+  Filter,
+  TrendingUp,
+  Users,
+  Zap,
+  Crown,
+  MoreVertical,
+  Mail,
+  FileText,
+  BarChart3,
+} from 'lucide-react';
+import { formatDate, formatCurrency } from '@/lib/utils';
 
 interface Subscription {
   id: string;
@@ -19,37 +29,44 @@ interface Subscription {
   created_at: string;
 }
 
+interface SubscriptionStats {
+  totalSubscriptions: number;
+  trialCount: number;
+  basicCount: number;
+  professionalCount: number;
+  enterpriseCount: number;
+  monthlyRecurringRevenue: number;
+  annualRecurringRevenue: number;
+  conversionRate: number;
+  averageRevenuPerSubscription: number;
+}
+
 export default function SubscriptionsPage() {
   const router = useRouter();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [stats, setStats] = useState<SubscriptionStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
   const [tierFilter, setTierFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSubscriptions();
-  }, [page, search, statusFilter, tierFilter]);
+    fetchStats();
+  }, [search, tierFilter]);
 
   const fetchSubscriptions = async () => {
     try {
       const params = new URLSearchParams({
-        page: page.toString(),
-        limit: '20',
+        limit: '50',
         ...(search && { search }),
-        ...(statusFilter && { status: statusFilter }),
         ...(tierFilter && { tier: tierFilter }),
       });
 
       const res = await fetch(`/api/subscriptions?${params}`);
       const data = await res.json();
 
-      setSubscriptions(data.subscriptions);
-      setTotalPages(data.pagination.totalPages);
-      setTotal(data.pagination.total);
+      setSubscriptions(data.subscriptions || []);
     } catch (error) {
       console.error('Failed to fetch subscriptions:', error);
     } finally {
@@ -57,12 +74,72 @@ export default function SubscriptionsPage() {
     }
   };
 
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/subscriptions/stats');
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    }
+  };
+
+  const getTierIcon = (tier: string | null) => {
+    switch (tier?.toLowerCase()) {
+      case 'enterprise':
+        return <Crown className="w-5 h-5 text-purple-600" />;
+      case 'professional':
+        return <Zap className="w-5 h-5 text-blue-600" />;
+      case 'basic':
+        return <CreditCard className="w-5 h-5 text-green-600" />;
+      default:
+        return <Users className="w-5 h-5 text-slate-600" />;
+    }
+  };
+
+  const getTierColor = (tier: string | null) => {
+    switch (tier?.toLowerCase()) {
+      case 'enterprise':
+        return 'bg-purple-100 text-purple-800';
+      case 'professional':
+        return 'bg-blue-100 text-blue-800';
+      case 'basic':
+        return 'bg-green-100 text-green-800';
+      default:
+        return 'bg-slate-100 text-slate-800';
+    }
+  };
+
+  const getTierPrice = (tier: string | null) => {
+    switch (tier?.toLowerCase()) {
+      case 'enterprise':
+        return 'Custom Pricing';
+      case 'professional':
+        return '$299/mo';
+      case 'basic':
+        return '$99/mo';
+      default:
+        return 'Free Trial';
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-10 bg-slate-200 rounded w-64" />
-          <div className="h-96 bg-slate-200 rounded" />
+        <div className="animate-pulse space-y-6">
+          <div className="h-12 bg-slate-200 rounded w-48" />
+          <div className="grid grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-24 bg-slate-200 rounded" />
+            ))}
+          </div>
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-20 bg-slate-200 rounded" />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -73,238 +150,260 @@ export default function SubscriptionsPage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Subscriptions</h1>
-        <p className="text-slate-600">
-          Manage all user subscriptions and billing ({total.toLocaleString()} total)
-        </p>
+        <p className="text-slate-600">Manage and monitor subscription tiers and billing</p>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+      {/* Stats Overview */}
+      {stats && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {/* Total Subscriptions */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-slate-600">Total</span>
+              <Users className="w-4 h-4 text-slate-400" />
+            </div>
+            <p className="text-2xl font-bold text-slate-900">{stats.totalSubscriptions}</p>
+            <p className="text-xs text-slate-500 mt-1">Active subscriptions</p>
+          </div>
+
+          {/* MRR */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-slate-600">MRR</span>
+              <TrendingUp className="w-4 h-4 text-green-600" />
+            </div>
+            <p className="text-2xl font-bold text-slate-900">
+              {formatCurrency(stats.monthlyRecurringRevenue)}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">Monthly recurring</p>
+          </div>
+
+          {/* ARR */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-slate-600">ARR</span>
+              <BarChart3 className="w-4 h-4 text-blue-600" />
+            </div>
+            <p className="text-2xl font-bold text-slate-900">
+              {formatCurrency(stats.annualRecurringRevenue)}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">Annual recurring</p>
+          </div>
+
+          {/* ARPU */}
+          <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-slate-600">ARPU</span>
+              <CreditCard className="w-4 h-4 text-orange-600" />
+            </div>
+            <p className="text-2xl font-bold text-slate-900">
+              {formatCurrency(stats.averageRevenuPerSubscription)}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">Per user average</p>
+          </div>
+        </div>
+      )}
+
+      {/* Tier Breakdown Cards */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {/* Enterprise */}
+          <div className="bg-gradient-to-br from-purple-50 to-white rounded-lg border border-purple-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-slate-900">Enterprise</h3>
+              <Crown className="w-5 h-5 text-purple-600" />
+            </div>
+            <p className="text-3xl font-bold text-purple-600 mb-1">{stats.enterpriseCount}</p>
+            <p className="text-sm text-slate-600 mb-3">subscribers</p>
+            <button
+              onClick={() => setTierFilter('enterprise')}
+              className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition"
+            >
+              View All
+            </button>
+          </div>
+
+          {/* Professional */}
+          <div className="bg-gradient-to-br from-blue-50 to-white rounded-lg border border-blue-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-slate-900">Professional</h3>
+              <Zap className="w-5 h-5 text-blue-600" />
+            </div>
+            <p className="text-3xl font-bold text-blue-600 mb-1">{stats.professionalCount}</p>
+            <p className="text-sm text-slate-600 mb-3">subscribers</p>
+            <button
+              onClick={() => setTierFilter('professional')}
+              className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
+            >
+              View All
+            </button>
+          </div>
+
+          {/* Basic */}
+          <div className="bg-gradient-to-br from-green-50 to-white rounded-lg border border-green-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-slate-900">Basic</h3>
+              <CreditCard className="w-5 h-5 text-green-600" />
+            </div>
+            <p className="text-3xl font-bold text-green-600 mb-1">{stats.basicCount}</p>
+            <p className="text-sm text-slate-600 mb-3">subscribers</p>
+            <button
+              onClick={() => setTierFilter('basic')}
+              className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition"
+            >
+              View All
+            </button>
+          </div>
+
+          {/* Trial */}
+          <div className="bg-gradient-to-br from-orange-50 to-white rounded-lg border border-orange-200 p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-slate-900">Trials</h3>
+              <Users className="w-5 h-5 text-orange-600" />
+            </div>
+            <p className="text-3xl font-bold text-orange-600 mb-1">{stats.trialCount}</p>
+            <p className="text-sm text-slate-600 mb-3">active trials</p>
+            <button
+              onClick={() => setTierFilter('trial')}
+              className="w-full px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition"
+            >
+              View All
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Controls */}
+      <div className="bg-white rounded-lg border border-slate-200 p-4 mb-8">
+        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by email or name..."
+              placeholder="Search by email, company, name..."
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
 
-          {/* Status Filter */}
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-            >
-              <option value="">All Statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="trial">Trial</option>
-              <option value="trialing">Trialing</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="past_due">Past Due</option>
-            </select>
-          </div>
-
-          {/* Tier Filter */}
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <select
-              value={tierFilter}
-              onChange={(e) => {
-                setTierFilter(e.target.value);
-                setPage(1);
-              }}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-            >
-              <option value="">All Tiers</option>
-              <option value="free">Free</option>
-              <option value="basic">Basic</option>
-              <option value="professional">Professional</option>
-              <option value="enterprise">Enterprise</option>
-              <option value="admin">Admin</option>
-              <option value="trial">Trial</option>
-            </select>
-          </div>
+          <button
+            onClick={() => router.push('/dashboard/outreach')}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition"
+          >
+            <Mail className="w-4 h-4" />
+            Contractor Outreach
+          </button>
         </div>
       </div>
 
-      {/* Subscriptions Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Customer
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Plan
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Stripe
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Created
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {subscriptions.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
-                    <CreditCard className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                    <p className="text-slate-500">No subscriptions found</p>
-                  </td>
-                </tr>
-              ) : (
-                subscriptions.map((sub) => (
-                  <tr key={sub.id} className="hover:bg-slate-50 transition">
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className="font-medium text-slate-900">
-                          {sub.name || 'No name'}
-                        </div>
-                        <div className="text-sm text-slate-500">{sub.email}</div>
-                        {sub.company && (
-                          <div className="text-xs text-slate-400">{sub.company}</div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        sub.plan_tier === 'enterprise' || sub.plan_tier === 'admin' ? 'bg-purple-100 text-purple-800' :
-                        sub.plan_tier === 'professional' ? 'bg-blue-100 text-blue-800' :
-                        sub.plan_tier === 'basic' ? 'bg-green-100 text-green-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {(sub.plan_tier || 'free').toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(sub.plan_status?.toUpperCase() || 'INACTIVE')}`}>
-                        {(sub.plan_status || 'inactive').toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      {sub.stripe_customer_id ? (
-                        <div className="flex items-center gap-2">
-                          <CreditCard className="w-4 h-4 text-green-600" />
-                          <span className="text-green-600 font-medium">Connected</span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400">No Stripe</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {formatDate(sub.created_at)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
+      {/* Subscriptions List */}
+      {subscriptions.length === 0 ? (
+        <div className="text-center py-16">
+          <CreditCard className="w-16 h-16 mx-auto mb-4 text-slate-300" />
+          <p className="text-slate-500 text-lg">No subscriptions found</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {subscriptions.map((sub) => (
+            <div
+              key={sub.id}
+              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition cursor-pointer"
+              onClick={() => router.push(`/dashboard/subscriptions/${sub.id}`)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="font-semibold text-slate-900">
+                      {sub.name || 'Unnamed'}
+                    </h3>
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getTierColor(
+                        sub.plan_tier
+                      )}`}
+                    >
+                      {sub.plan_tier?.toUpperCase() || 'TRIAL'}
+                    </span>
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        sub.plan_status === 'active'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-slate-100 text-slate-800'
+                      }`}
+                    >
+                      {sub.plan_status?.toUpperCase() || 'INACTIVE'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600">{sub.email}</p>
+                  {sub.company && (
+                    <p className="text-sm text-slate-500 mt-1">{sub.company}</p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-4 text-right">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">
+                      {getTierPrice(sub.plan_tier)}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Since {formatDate(sub.created_at)}
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(openMenuId === sub.id ? null : sub.id);
+                      }}
+                      className="p-2 hover:bg-slate-50 rounded-lg transition text-slate-400 hover:text-slate-600"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+
+                    {openMenuId === sub.id && (
+                      <div className="absolute right-0 top-full mt-1 bg-white rounded-lg border border-slate-200 shadow-lg z-10 min-w-48">
                         <button
-                          onClick={() => router.push(`/dashboard/users/${sub.id}`)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                          title="View Details"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/dashboard/subscriptions/${sub.id}`);
+                            setOpenMenuId(null);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 font-medium border-b border-slate-100 text-sm"
                         >
-                          <Eye className="w-4 h-4" />
+                          View Details
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Email functionality
+                            setOpenMenuId(null);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-blue-50 text-blue-600 text-sm"
+                        >
+                          <Mail className="w-3.5 h-3.5 inline mr-2" />
+                          Send Email
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Export functionality
+                            setOpenMenuId(null);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-green-50 text-green-600 text-sm"
+                        >
+                          <FileText className="w-3.5 h-3.5 inline mr-2" />
+                          Export
                         </button>
                       </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {subscriptions.length > 0 && (
-          <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
-            <div className="text-sm text-slate-600">
-              Showing {((page - 1) * 20) + 1} to {Math.min(page * 20, total)} of {total} subscriptions
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-2 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <span className="px-4 py-2 text-sm font-medium text-slate-700">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="p-2 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <DollarSign className="w-5 h-5 text-green-600" />
-            <span className="text-sm text-slate-600">Active Subs</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">
-            {subscriptions.filter(s => s.plan_status === 'active').length}
-          </p>
+          ))}
         </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <Calendar className="w-5 h-5 text-blue-600" />
-            <span className="text-sm text-slate-600">Trials</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">
-            {subscriptions.filter(s => s.plan_status === 'trial' || s.plan_status === 'trialing').length}
-          </p>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <CreditCard className="w-5 h-5 text-purple-600" />
-            <span className="text-sm text-slate-600">With Stripe</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">
-            {subscriptions.filter(s => s.stripe_customer_id).length}
-          </p>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <Users className="w-5 h-5 text-orange-600" />
-            <span className="text-sm text-slate-600">Free Users</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">
-            {subscriptions.filter(s => !s.plan_tier || s.plan_tier === 'free').length}
-          </p>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

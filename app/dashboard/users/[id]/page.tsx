@@ -9,14 +9,12 @@ import {
   Key,
   Ban,
   CheckCircle,
-  Mail,
-  Building,
-  Phone,
+  XCircle,
+  Trash2,
   Calendar,
   Activity,
   CreditCard,
-  Search,
-  Bookmark,
+  Clock,
 } from 'lucide-react';
 import { formatDate, formatDateTime, getStatusColor } from '@/lib/utils';
 
@@ -25,12 +23,14 @@ interface UserDetail {
   email: string;
   name: string | null;
   company: string | null;
-  phone: string | null;
   plan: string;
   plan_status: string | null;
   plan_tier: string | null;
   created_at: string;
   updated_at: string;
+  last_login_at: string | null;
+  is_active: boolean;
+  is_suspended: boolean;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
 }
@@ -45,9 +45,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [company, setCompany] = useState('');
-  const [phone, setPhone] = useState('');
   const [planTier, setPlanTier] = useState('');
   const [planStatus, setPlanStatus] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [isSuspended, setIsSuspended] = useState(false);
 
   useEffect(() => {
     fetchUser();
@@ -68,9 +69,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
       setName(data.user.name || '');
       setEmail(data.user.email);
       setCompany(data.user.company || '');
-      setPhone(data.user.phone || '');
-      setPlanTier(data.user.plan_tier || 'free');
-      setPlanStatus(data.user.plan_status || 'inactive');
+      setPlanTier(data.user.plan_tier || 'FREE');
+      setPlanStatus(data.user.plan_status || 'INACTIVE');
+      setIsActive(data.user.is_active ?? true);
+      setIsSuspended(data.user.is_suspended ?? false);
     } catch (error) {
       toast.error('Failed to fetch user');
     } finally {
@@ -89,7 +91,6 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
           name,
           email,
           company,
-          phone,
           plan_tier: planTier,
           plan_status: planStatus,
         }),
@@ -128,6 +129,48 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
       toast.success('Password reset successfully');
     } catch (error) {
       toast.error('Failed to reset password');
+    }
+  };
+
+  const handleToggleSuspend = async () => {
+    try {
+      const res = await fetch(`/api/users/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_suspended: !isSuspended }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(isSuspended ? 'User unsuspended' : 'User suspended');
+      fetchUser();
+    } catch (error) {
+      toast.error('Failed to update user');
+    }
+  };
+
+  const handleToggleActive = async () => {
+    try {
+      const res = await fetch(`/api/users/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !isActive }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(isActive ? 'User deactivated' : 'User activated');
+      fetchUser();
+    } catch (error) {
+      toast.error('Failed to update user');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
+    try {
+      const res = await fetch(`/api/users/${params.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      toast.success('User deleted successfully');
+      router.push('/dashboard/users');
+    } catch (error) {
+      toast.error('Failed to delete user');
     }
   };
 
@@ -214,18 +257,6 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
             </div>
           </div>
 
@@ -243,10 +274,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                   onChange={(e) => setPlanTier(e.target.value)}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="free">Free</option>
-                  <option value="basic">Basic</option>
-                  <option value="professional">Professional</option>
-                  <option value="enterprise">Enterprise</option>
+                  <option value="FREE">Free</option>
+                  <option value="BASIC">Basic</option>
+                  <option value="PROFESSIONAL">Professional</option>
+                  <option value="ENTERPRISE">Enterprise</option>
                 </select>
               </div>
 
@@ -259,11 +290,12 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                   onChange={(e) => setPlanStatus(e.target.value)}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="trial">Trial</option>
-                  <option value="cancelled">Cancelled</option>
-                  <option value="past_due">Past Due</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="TRIALING">Trialing</option>
+                  <option value="PAST_DUE">Past Due</option>
+                  <option value="CANCELED">Canceled</option>
+                  <option value="UNPAID">Unpaid</option>
                 </select>
               </div>
 
@@ -286,6 +318,25 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
 
         {/* Right Column - Actions & Info */}
         <div className="space-y-6">
+          {/* Account Status */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Account Status</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">Active</span>
+                <span className={`px-2 py-1 text-xs font-medium rounded-full ${isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                  {isActive ? 'Yes' : 'No'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">Suspended</span>
+                <span className={`px-2 py-1 text-xs font-medium rounded-full ${isSuspended ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                  {isSuspended ? 'Yes' : 'No'}
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* Quick Actions */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Quick Actions</h3>
@@ -297,10 +348,31 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                 <Key className="w-5 h-5 text-slate-600" />
                 <span className="font-medium text-slate-900">Reset Password</span>
               </button>
+              <button
+                onClick={handleToggleSuspend}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${isSuspended ? 'bg-green-50 hover:bg-green-100' : 'bg-orange-50 hover:bg-orange-100'}`}
+              >
+                {isSuspended ? <CheckCircle className="w-5 h-5 text-green-600" /> : <Ban className="w-5 h-5 text-orange-600" />}
+                <span className="font-medium text-slate-900">{isSuspended ? 'Unsuspend User' : 'Suspend User'}</span>
+              </button>
+              <button
+                onClick={handleToggleActive}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${isActive ? 'bg-yellow-50 hover:bg-yellow-100' : 'bg-green-50 hover:bg-green-100'}`}
+              >
+                {isActive ? <XCircle className="w-5 h-5 text-yellow-600" /> : <CheckCircle className="w-5 h-5 text-green-600" />}
+                <span className="font-medium text-slate-900">{isActive ? 'Deactivate User' : 'Activate User'}</span>
+              </button>
+              <button
+                onClick={handleDelete}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-red-50 hover:bg-red-100 rounded-lg transition"
+              >
+                <Trash2 className="w-5 h-5 text-red-600" />
+                <span className="font-medium text-red-700">Delete User</span>
+              </button>
             </div>
           </div>
 
-          {/* Stats */}
+          {/* User Info */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">User Info</h3>
             <div className="space-y-4">
@@ -311,6 +383,15 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                 </div>
                 <span className="font-semibold text-slate-900">
                   {formatDate(user.created_at)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-blue-600" />
+                  <span className="text-sm text-slate-600">Last Login</span>
+                </div>
+                <span className="font-semibold text-slate-900">
+                  {user.last_login_at ? formatDateTime(user.last_login_at) : 'Never'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -327,8 +408,8 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                   <CreditCard className="w-5 h-5 text-green-600" />
                   <span className="text-sm text-slate-600">Current Plan</span>
                 </div>
-                <span className="font-semibold text-slate-900 capitalize">
-                  {user.plan || 'Free'}
+                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(user.plan_tier || 'FREE')}`}>
+                  {user.plan_tier || 'FREE'}
                 </span>
               </div>
             </div>
