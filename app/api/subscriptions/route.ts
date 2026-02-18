@@ -32,7 +32,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (tier) {
-      where.plan_tier = tier;
+      // Handle tier filtering - case insensitive matching for tier values
+      where.plan_tier = {
+        equals: tier.toUpperCase(),
+        mode: 'insensitive',
+      };
     }
 
     // Get total count

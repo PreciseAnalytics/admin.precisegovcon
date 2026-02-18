@@ -244,3 +244,84 @@ export async function sendPasswordResetEmail(
     text: `Reset your password here: ${resetUrl}`,
   });
 }
+
+/**
+ * Send email verification email to newly created user
+ */
+export async function sendEmailVerificationEmail(options: {
+  email: string;
+  firstName: string;
+  company?: string;
+  verificationUrl: string;
+  expiresIn?: string;
+}): Promise<boolean> {
+  const subject = '✉️ Verify Your Email - PreciseGovCon';
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
+          .header h1 { margin: 0; font-size: 24px; }
+          .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+          .button { display: inline-block; background: #ea580c; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin: 20px 0; }
+          .info-box { background: white; padding: 16px; border-radius: 6px; border-left: 4px solid #ea580c; margin: 20px 0; }
+          .footer { text-align: center; padding-top: 20px; color: #666; font-size: 12px; }
+          .badge { display: inline-block; background: #dbeafe; color: #1e40af; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>✉️ Verify Your Email</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">Complete your account setup</p>
+          </div>
+
+          <div class="content">
+            <p>Hello <strong>${options.firstName}</strong>,</p>
+
+            <p>Thank you for signing up for PreciseGovCon Admin Portal! To activate your account, please verify your email address by clicking the button below:</p>
+
+            <center>
+              <a href="${options.verificationUrl}" class="button">Verify Email Address</a>
+            </center>
+
+            <div class="info-box">
+              <p><strong>📋 Account Details:</strong></p>
+              <p style="margin: 8px 0;"><strong>Email:</strong> ${options.email}</p>
+              ${options.company ? `<p style="margin: 8px 0;"><strong>Company:</strong> ${options.company}</p>` : ''}
+              <p style="margin: 8px 0;"><strong>Status:</strong> <span class="badge">Pending Verification</span></p>
+            </div>
+
+            <p>Or copy and paste this link in your browser:</p>
+            <p style="word-break: break-all; background: white; padding: 12px; border-radius: 4px; font-size: 12px; border: 1px solid #e5e7eb;">${options.verificationUrl}</p>
+
+            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 4px; margin: 20px 0;">
+              <p><strong>⏰ Expires in ${options.expiresIn || '7 days'}</strong></p>
+              <p style="margin: 8px 0 0 0; font-size: 14px;">After this time, you'll need to sign up again or contact support.</p>
+            </div>
+
+            <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+              If you didn't create this account, please ignore this email or contact us at <strong>support@precisegovcon.com</strong>
+            </p>
+          </div>
+
+          <div class="footer">
+            <p>© 2025 PreciseGovCon. All rights reserved.</p>
+            <p style="margin: 8px 0 0 0;">This is an automated message, please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: options.email,
+    subject,
+    html,
+    text: `Verify your email: ${options.verificationUrl}`,
+  });
+}

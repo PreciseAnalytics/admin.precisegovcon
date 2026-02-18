@@ -14,6 +14,7 @@ import {
   Mail,
   FileText,
   BarChart3,
+  X,
 } from 'lucide-react';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import StatDrillDownModal from '@/components/StatDrillDownModal';
@@ -176,49 +177,70 @@ export default function SubscriptionsPage() {
             {/* MRR */}
             <button
               onClick={() => setOpenDrillDown('mrr')}
-              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-green-300 transition cursor-pointer hover:scale-105 transform duration-200"
+              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-green-300 transition cursor-pointer hover:scale-105 transform duration-200 relative group"
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-slate-600">MRR</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-slate-600">MRR</span>
+                  <span className="text-xs text-green-600 font-semibold">(Monthly)</span>
+                </div>
                 <TrendingUp className="w-4 h-4 text-green-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">
                 {formatCurrency(stats.monthlyRecurringRevenue)}
               </p>
-              <p className="text-xs text-slate-500 mt-1">Monthly recurring revenue</p>
+              <p className="text-xs text-slate-500 mt-1">Recurring Monthly Revenue</p>
               <p className="text-xs text-slate-400 mt-2">Click for breakdown</p>
+              {/* Tooltip on hover */}
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-900 text-white text-xs rounded-lg p-2 whitespace-normal z-40 shadow-lg opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                Total predictable revenue from all active subscriptions per month
+              </div>
             </button>
 
             {/* ARR */}
             <button
               onClick={() => setOpenDrillDown('arr')}
-              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-blue-300 transition cursor-pointer hover:scale-105 transform duration-200"
+              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-blue-300 transition cursor-pointer hover:scale-105 transform duration-200 relative group"
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-slate-600">ARR</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-slate-600">ARR</span>
+                  <span className="text-xs text-blue-600 font-semibold">(Annual)</span>
+                </div>
                 <BarChart3 className="w-4 h-4 text-blue-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">
                 {formatCurrency(stats.annualRecurringRevenue)}
               </p>
-              <p className="text-xs text-slate-500 mt-1">Annual recurring revenue</p>
+              <p className="text-xs text-slate-500 mt-1">Recurring Annual Revenue</p>
               <p className="text-xs text-slate-400 mt-2">Click for breakdown</p>
+              {/* Tooltip on hover */}
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-900 text-white text-xs rounded-lg p-2 whitespace-normal z-40 shadow-lg opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                Total predictable annual revenue (MRR × 12)
+              </div>
             </button>
 
             {/* ARPU */}
             <button
               onClick={() => setOpenDrillDown('arpu')}
-              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-orange-300 transition cursor-pointer hover:scale-105 transform duration-200"
+              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-orange-300 transition cursor-pointer hover:scale-105 transform duration-200 relative group"
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-slate-600">ARPU</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-slate-600">ARPU</span>
+                  <span className="text-xs text-orange-600 font-semibold">(Per User)</span>
+                </div>
                 <CreditCard className="w-4 h-4 text-orange-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">
                 {formatCurrency(stats.averageRevenuPerSubscription)}
               </p>
-              <p className="text-xs text-slate-500 mt-1">Avg revenue per user</p>
+              <p className="text-xs text-slate-500 mt-1">Avg Revenue Per User</p>
               <p className="text-xs text-slate-400 mt-2">Click for tier breakdown</p>
+              {/* Tooltip on hover */}
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-900 text-white text-xs rounded-lg p-2 whitespace-normal z-40 shadow-lg opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                Average revenue per paying subscriber (Total Revenue ÷ Active Subscriptions)
+              </div>
             </button>
           </div>
 
@@ -311,7 +333,7 @@ export default function SubscriptionsPage() {
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {/* Enterprise */}
-          <div className="bg-gradient-to-br from-purple-50 to-white rounded-lg border border-purple-200 p-6">
+          <div className={`bg-gradient-to-br from-purple-50 to-white rounded-lg border-2 p-6 transition ${tierFilter === 'enterprise' ? 'border-purple-600 shadow-lg' : 'border-purple-200'}`}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-slate-900">Enterprise</h3>
               <Crown className="w-5 h-5 text-purple-600" />
@@ -319,15 +341,18 @@ export default function SubscriptionsPage() {
             <p className="text-3xl font-bold text-purple-600 mb-1">{stats.enterpriseCount}</p>
             <p className="text-sm text-slate-600 mb-3">subscribers</p>
             <button
-              onClick={() => setTierFilter('enterprise')}
-              className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition"
+              onClick={() => {
+                setSearch('');
+                setTierFilter('enterprise');
+              }}
+              className={`w-full px-3 py-2 text-white text-sm font-medium rounded-lg transition ${tierFilter === 'enterprise' ? 'bg-purple-700 ring-2 ring-purple-300' : 'bg-purple-600 hover:bg-purple-700'}`}
             >
-              View All
+              {tierFilter === 'enterprise' ? '✓ Filtering' : 'View All'}
             </button>
           </div>
 
           {/* Professional */}
-          <div className="bg-gradient-to-br from-blue-50 to-white rounded-lg border border-blue-200 p-6">
+          <div className={`bg-gradient-to-br from-blue-50 to-white rounded-lg border-2 p-6 transition ${tierFilter === 'professional' ? 'border-blue-600 shadow-lg' : 'border-blue-200'}`}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-slate-900">Professional</h3>
               <Zap className="w-5 h-5 text-blue-600" />
@@ -335,15 +360,18 @@ export default function SubscriptionsPage() {
             <p className="text-3xl font-bold text-blue-600 mb-1">{stats.professionalCount}</p>
             <p className="text-sm text-slate-600 mb-3">subscribers</p>
             <button
-              onClick={() => setTierFilter('professional')}
-              className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
+              onClick={() => {
+                setSearch('');
+                setTierFilter('professional');
+              }}
+              className={`w-full px-3 py-2 text-white text-sm font-medium rounded-lg transition ${tierFilter === 'professional' ? 'bg-blue-700 ring-2 ring-blue-300' : 'bg-blue-600 hover:bg-blue-700'}`}
             >
-              View All
+              {tierFilter === 'professional' ? '✓ Filtering' : 'View All'}
             </button>
           </div>
 
           {/* Basic */}
-          <div className="bg-gradient-to-br from-green-50 to-white rounded-lg border border-green-200 p-6">
+          <div className={`bg-gradient-to-br from-green-50 to-white rounded-lg border-2 p-6 transition ${tierFilter === 'basic' ? 'border-green-600 shadow-lg' : 'border-green-200'}`}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-slate-900">Basic</h3>
               <CreditCard className="w-5 h-5 text-green-600" />
@@ -351,15 +379,18 @@ export default function SubscriptionsPage() {
             <p className="text-3xl font-bold text-green-600 mb-1">{stats.basicCount}</p>
             <p className="text-sm text-slate-600 mb-3">subscribers</p>
             <button
-              onClick={() => setTierFilter('basic')}
-              className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition"
+              onClick={() => {
+                setSearch('');
+                setTierFilter('basic');
+              }}
+              className={`w-full px-3 py-2 text-white text-sm font-medium rounded-lg transition ${tierFilter === 'basic' ? 'bg-green-700 ring-2 ring-green-300' : 'bg-green-600 hover:bg-green-700'}`}
             >
-              View All
+              {tierFilter === 'basic' ? '✓ Filtering' : 'View All'}
             </button>
           </div>
 
           {/* Trial */}
-          <div className="bg-gradient-to-br from-orange-50 to-white rounded-lg border border-orange-200 p-6">
+          <div className={`bg-gradient-to-br from-orange-50 to-white rounded-lg border-2 p-6 transition ${tierFilter === 'trial' ? 'border-orange-600 shadow-lg' : 'border-orange-200'}`}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-slate-900">Trials</h3>
               <Users className="w-5 h-5 text-orange-600" />
@@ -367,10 +398,13 @@ export default function SubscriptionsPage() {
             <p className="text-3xl font-bold text-orange-600 mb-1">{stats.trialCount}</p>
             <p className="text-sm text-slate-600 mb-3">active trials</p>
             <button
-              onClick={() => setTierFilter('trial')}
-              className="w-full px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition"
+              onClick={() => {
+                setSearch('');
+                setTierFilter('trial');
+              }}
+              className={`w-full px-3 py-2 text-white text-sm font-medium rounded-lg transition ${tierFilter === 'trial' ? 'bg-orange-700 ring-2 ring-orange-300' : 'bg-orange-600 hover:bg-orange-700'}`}
             >
-              View All
+              {tierFilter === 'trial' ? '✓ Filtering' : 'View All'}
             </button>
           </div>
         </div>
@@ -389,6 +423,17 @@ export default function SubscriptionsPage() {
               className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
+
+          {tierFilter && (
+            <button
+              onClick={() => setTierFilter('')}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-100 hover:bg-orange-200 text-orange-800 rounded-lg font-medium transition"
+            >
+              <Filter className="w-4 h-4" />
+              Filtering: {tierFilter.toUpperCase()}
+              <X className="w-4 h-4" />
+            </button>
+          )}
 
           <button
             onClick={() => router.push('/dashboard/outreach')}

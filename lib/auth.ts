@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this';
 const COOKIE_NAME = 'admin_session';
@@ -141,4 +142,8 @@ export function getClientIP(request: Request): string {
   }
 
   return '127.0.0.1';
+}
+
+export function generateVerificationToken(): string {
+  return crypto.randomBytes(32).toString('hex');
 }
