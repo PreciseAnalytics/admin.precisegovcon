@@ -39,11 +39,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (status && status !== 'all') {
-      where.plan_status = status;
+      where.plan_status = { equals: status, mode: 'insensitive' };
     }
 
     if (tier && tier !== 'all') {
-      where.plan_tier = tier;
+      where.plan_tier = { equals: tier, mode: 'insensitive' };
     }
 
     // Fetch users and total count

@@ -333,9 +333,10 @@ export default function UsersPage() {
               className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
             >
               <option value="">All Status</option>
+              <option value="trialing">Trialing</option>
+              <option value="pending">Pending</option>
               <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="trial">Trial</option>
+              <option value="cancelled">Cancelled</option>
             </select>
 
             <select
@@ -347,10 +348,9 @@ export default function UsersPage() {
               className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
             >
               <option value="">All Tiers</option>
-              <option value="free">Free</option>
-              <option value="basic">Basic</option>
-              <option value="professional">Professional</option>
-              <option value="enterprise">Enterprise</option>
+              <option value="BASIC">Basic</option>
+              <option value="PROFESSIONAL">Professional</option>
+              <option value="ENTERPRISE">Enterprise</option>
             </select>
 
             <select
@@ -772,9 +772,11 @@ export default function UsersPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-slate-600">
-            Showing {users.length} of {total} users
-          </p>
+          <div className="px-4 py-2 bg-slate-100 rounded-lg border border-slate-300">
+            <p className="text-sm font-medium text-slate-700">
+              Showing {users.length} of {total} users
+            </p>
+          </div>
 
           <div className="flex gap-2">
             <button
