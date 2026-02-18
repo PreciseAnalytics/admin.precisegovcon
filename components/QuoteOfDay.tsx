@@ -52,9 +52,12 @@ const QUOTES: Quote[] = [
 ];
 
 export default function QuoteOfDay() {
-  const [quote, setQuote] = useState<Quote | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [quote, setQuote] = useState<Quote>(QUOTES[0]);
 
   useEffect(() => {
+    setMounted(true);
+
     // Get quote based on day of year (same quote for entire day)
     const today = new Date();
     const start = new Date(today.getFullYear(), 0, 0);
@@ -66,8 +69,23 @@ export default function QuoteOfDay() {
     setQuote(QUOTES[index]);
   }, []);
 
-  if (!quote) {
-    return <div className="h-16" />;
+  // Always render - use default quote until mounted with actual day's quote
+  if (!mounted) {
+    return (
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg p-4 border border-orange-200 dark:border-orange-800">
+        <div className="flex gap-3">
+          <Lightbulb className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-slate-700 dark:text-slate-300 italic">
+              "{QUOTES[0].text}"
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+              — {QUOTES[0].author}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
