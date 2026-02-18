@@ -19,6 +19,13 @@ import {
   TrendingUp,
   Grid3x3,
   List,
+  Zap,
+  Clock,
+  AlertCircle,
+  XCircle,
+  Crown,
+  Briefcase,
+  Layers,
 } from 'lucide-react';
 import { formatDate, getStatusColor, getTierColor } from '@/lib/utils';
 import AddUserModal from '@/components/AddUserModal';
@@ -184,6 +191,34 @@ export default function UsersPage() {
         return 'bg-yellow-100 text-yellow-800';
       default:
         return 'bg-slate-100 text-slate-800';
+    }
+  };
+
+  const getStatusIcon = (status: string | null) => {
+    switch (status?.toLowerCase()) {
+      case 'active':
+        return <Zap className="w-3 h-3" />;
+      case 'trialing':
+        return <Clock className="w-3 h-3" />;
+      case 'pending':
+        return <AlertCircle className="w-3 h-3" />;
+      case 'cancelled':
+        return <XCircle className="w-3 h-3" />;
+      default:
+        return <AlertCircle className="w-3 h-3" />;
+    }
+  };
+
+  const getTierIcon = (tier: string | null) => {
+    switch (tier?.toUpperCase()) {
+      case 'ENTERPRISE':
+        return <Crown className="w-3 h-3" />;
+      case 'PROFESSIONAL':
+        return <Briefcase className="w-3 h-3" />;
+      case 'BASIC':
+        return <Layers className="w-3 h-3" />;
+      default:
+        return <Users className="w-3 h-3" />;
     }
   };
 
@@ -518,9 +553,10 @@ export default function UsersPage() {
                     setTierFilter(user.plan_tier || '');
                     setPage(1);
                   }}
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getTierBadgeColor(user.plan_tier)}`}
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer flex items-center gap-1 ${getTierBadgeColor(user.plan_tier)}`}
                   title="Filter by tier"
                 >
+                  {getTierIcon(user.plan_tier)}
                   {user.plan_tier?.charAt(0).toUpperCase() + user.plan_tier?.slice(1) || 'Free'}
                 </button>
 
@@ -530,20 +566,23 @@ export default function UsersPage() {
                     setStatusFilter(user.plan_status || '');
                     setPage(1);
                   }}
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getStatusBadgeColor(user.plan_status)}`}
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer flex items-center gap-1 ${getStatusBadgeColor(user.plan_status)}`}
                   title="Filter by status"
                 >
+                  {getStatusIcon(user.plan_status)}
                   {user.plan_status?.charAt(0).toUpperCase() + user.plan_status?.slice(1) || 'Inactive'}
                 </button>
 
                 {user.is_suspended && (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 flex items-center gap-1 w-fit">
+                    <Ban className="w-3 h-3" />
                     Suspended
                   </span>
                 )}
 
                 {user.is_active && !user.is_suspended && (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 flex items-center gap-1 w-fit">
+                    <Zap className="w-3 h-3" />
                     Active
                   </span>
                 )}
@@ -603,9 +642,10 @@ export default function UsersPage() {
                               setTierFilter(user.plan_tier || '');
                               setPage(1);
                             }}
-                            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getTierBadgeColor(user.plan_tier)}`}
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer flex items-center gap-1 ${getTierBadgeColor(user.plan_tier)}`}
                             title="Filter by tier"
                           >
+                            {getTierIcon(user.plan_tier)}
                             {user.plan_tier?.charAt(0).toUpperCase() + user.plan_tier?.slice(1) || 'Free'}
                           </button>
                         </td>
@@ -616,9 +656,10 @@ export default function UsersPage() {
                               setStatusFilter(user.plan_status || '');
                               setPage(1);
                             }}
-                            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getStatusBadgeColor(user.plan_status)}`}
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer flex items-center gap-1 ${getStatusBadgeColor(user.plan_status)}`}
                             title="Filter by status"
                           >
+                            {getStatusIcon(user.plan_status)}
                             {user.plan_status?.charAt(0).toUpperCase() + user.plan_status?.slice(1) || 'Inactive'}
                           </button>
                         </td>
@@ -724,9 +765,10 @@ export default function UsersPage() {
                         setTierFilter(user.plan_tier || '');
                         setPage(1);
                       }}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getTierBadgeColor(user.plan_tier)}`}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer flex items-center gap-1 ${getTierBadgeColor(user.plan_tier)}`}
                       title="Filter by tier"
                     >
+                      {getTierIcon(user.plan_tier)}
                       {user.plan_tier?.charAt(0).toUpperCase() + user.plan_tier?.slice(1) || 'Free'}
                     </button>
                   </td>
@@ -737,9 +779,10 @@ export default function UsersPage() {
                         setStatusFilter(user.plan_status || '');
                         setPage(1);
                       }}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getStatusBadgeColor(user.plan_status)}`}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer flex items-center gap-1 ${getStatusBadgeColor(user.plan_status)}`}
                       title="Filter by status"
                     >
+                      {getStatusIcon(user.plan_status)}
                       {user.plan_status?.charAt(0).toUpperCase() + user.plan_status?.slice(1) || 'Inactive'}
                     </button>
                   </td>
