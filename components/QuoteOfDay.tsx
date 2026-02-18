@@ -1,12 +1,11 @@
+//Components/Quoteofday.tsx
+
 'use client';
 
 import { useEffect, useState } from 'react';
 import { Lightbulb } from 'lucide-react';
 
-interface Quote {
-  text: string;
-  author: string;
-}
+interface Quote { text: string; author: string; }
 
 const QUOTES: Quote[] = [
   { text: "The best time to plant a tree was 20 years ago. The second best time is now.", author: "Chinese Proverb" },
@@ -16,7 +15,7 @@ const QUOTES: Quote[] = [
   { text: "The future belongs to those who believe in the beauty of their dreams.", author: "Eleanor Roosevelt" },
   { text: "It is during our darkest moments that we must focus to see the light.", author: "Aristotle" },
   { text: "The only impossible journey is the one you never begin.", author: "Tony Robbins" },
-  { text: "Success is not how high you have climbed, but how you make a positive difference to the world.", author: "Roy T. Bennett" },
+  { text: "Success is not how high you have climbed, but how you make a positive difference.", author: "Roy T. Bennett" },
   { text: "Believe you can and you're halfway there.", author: "Theodore Roosevelt" },
   { text: "The best revenge is massive success.", author: "Frank Sinatra" },
 ];
@@ -32,22 +31,21 @@ export default function QuoteOfDay() {
   const [quote, setQuote] = useState<Quote>(QUOTES[0]);
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setQuote(getQuoteForToday());
-    setMounted(true);
-  }, []);
+  useEffect(() => { setQuote(getQuoteForToday()); setMounted(true); }, []);
 
   const displayQuote = mounted ? quote : QUOTES[0];
 
   return (
-    <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg p-4 border border-orange-200 dark:border-orange-800">
-      <div className="flex gap-3">
-        <Lightbulb className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+    <div className="rounded-xl p-5 border-2 border-amber-400" style={{ background: '#fef3c7' }}>
+      <div className="flex gap-4">
+        <div className="w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: '#f59e0b' }}>
+          <Lightbulb className="w-6 h-6 text-white" />
+        </div>
         <div className="flex-1">
-          <p className="text-sm text-slate-700 dark:text-slate-300 italic">
+          <p className="text-lg font-black text-slate-900 italic leading-relaxed">
             &ldquo;{displayQuote.text}&rdquo;
           </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+          <p className="text-base font-black text-orange-700 mt-3">
             &mdash; {displayQuote.author}
           </p>
         </div>

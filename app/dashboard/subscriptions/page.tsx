@@ -1,24 +1,17 @@
+//app/dashboard/subscriptions/page.tsx
+
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  CreditCard,
-  Search,
-  Filter,
-  TrendingUp,
-  Users,
-  Zap,
-  Crown,
-  MoreVertical,
-  Mail,
-  FileText,
-  BarChart3,
-  X,
+  CreditCard, Search, TrendingUp, Users, Zap, Crown,
+  Mail, FileText, BarChart3, DollarSign, ArrowRight,
+  ChevronRight, X, RefreshCw,
 } from 'lucide-react';
 import { formatDate, formatCurrency } from '@/lib/utils';
-import StatDrillDownModal from '@/components/StatDrillDownModal';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface Subscription {
   id: string;
   email: string;
@@ -43,105 +36,257 @@ interface SubscriptionStats {
   averageRevenuPerSubscription: number;
 }
 
+// ─── Tier theme config ────────────────────────────────────────────────────────
+const TIER_THEMES = {
+  all: {
+    bg: '#0f172a', bgLight: '#f1f5f9', accent: '#475569',
+    accentDark: '#334155', border: '#cbd5e1',
+    text: '#0f172a', label: 'All Subscriptions',
+  },
+  trial: {
+    bg: '#7c2d12', bgLight: '#fff7ed', accent: '#f97316',
+    accentDark: '#ea580c', border: '#fdba74',
+    text: '#7c2d12', label: 'Trial Users',
+  },
+  basic: {
+    bg: '#14532d', bgLight: '#f0fdf4', accent: '#22c55e',
+    accentDark: '#16a34a', border: '#86efac',
+    text: '#14532d', label: 'Basic',
+  },
+  professional: {
+    bg: '#1e3a8a', bgLight: '#eff6ff', accent: '#3b82f6',
+    accentDark: '#1d4ed8', border: '#93c5fd',
+    text: '#1e3a8a', label: 'Professional',
+  },
+  enterprise: {
+    bg: '#581c87', bgLight: '#faf5ff', accent: '#a855f7',
+    accentDark: '#7e22ce', border: '#d8b4fe',
+    text: '#581c87', label: 'Enterprise',
+  },
+  mrr: {
+    bg: '#134e4a', bgLight: '#f0fdfa', accent: '#14b8a6',
+    accentDark: '#0f766e', border: '#5eead4',
+    text: '#134e4a', label: 'Revenue',
+  },
+  arr: {
+    bg: '#1e1b4b', bgLight: '#eef2ff', accent: '#6366f1',
+    accentDark: '#4338ca', border: '#a5b4fc',
+    text: '#1e1b4b', label: 'Annual Revenue',
+  },
+} as const;
+
+type TierKey = keyof typeof TIER_THEMES;
+
+// ─── Tier helpers ─────────────────────────────────────────────────────────────
+const getTierPrice = (tier: string | null) => {
+  switch (tier?.toLowerCase()) {
+    case 'enterprise':   return 'Custom Pricing';
+    case 'professional': return '$299/mo';
+    case 'basic':        return '$99/mo';
+    default:             return 'Free Trial';
+  }
+};
+
+const getTierKey = (tier: string | null): TierKey => {
+  switch (tier?.toLowerCase()) {
+    case 'enterprise':   return 'enterprise';
+    case 'professional': return 'professional';
+    case 'basic':        return 'basic';
+    default:             return 'trial';
+  }
+};
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+function StatCard({
+  themeKey, label, value, sub, icon: Icon,
+  activeTheme, onClick,
+}: {
+  themeKey: TierKey; label: string; value: string; sub: string;
+  icon: React.ElementType; activeTheme: TierKey; onClick: (k: TierKey) => void;
+}) {
+  const theme    = TIER_THEMES[themeKey];
+  const isActive = activeTheme === themeKey;
+
+  return (
+    <button onClick={() => onClick(themeKey)} className="w-full text-left rounded-2xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl"
+      style={{
+        background:  isActive ? theme.bg      : theme.bgLight,
+        border:      `3px solid ${isActive ? theme.accent : theme.border}`,
+        boxShadow:   isActive ? `0 8px 32px ${theme.accent}44` : '0 2px 8px rgba(0,0,0,0.06)',
+        transform:   isActive ? 'translateY(-4px)' : undefined,
+      }}>
+      <div className="p-5">
+        {/* Icon + label */}
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm"
+            style={{ background: isActive ? 'rgba(255,255,255,0.2)' : theme.bg }}>
+            <Icon className="w-5 h-5 text-white"/>
+          </div>
+          <span className="text-sm font-black uppercase tracking-wide"
+            style={{ color: isActive ? 'rgba(255,255,255,0.8)' : theme.accentDark }}>
+            {label}
+          </span>
+        </div>
+
+        {/* Value */}
+        <p className="text-4xl font-black mb-1" style={{ color: isActive ? '#fff' : theme.text, lineHeight: 1 }}>
+          {value}
+        </p>
+        <p className="text-sm font-bold mb-4" style={{ color: isActive ? 'rgba(255,255,255,0.7)' : theme.accentDark }}>
+          {sub}
+        </p>
+
+        {/* CTA button */}
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-sm"
+          style={{
+            background: isActive ? 'rgba(255,255,255,0.18)' : theme.bg,
+            color: '#fff',
+            border: `2px solid ${isActive ? 'rgba(255,255,255,0.35)' : theme.accentDark}`,
+          }}>
+          <span>{isActive ? `✓ Viewing ${theme.label}` : `View ${theme.label}`}</span>
+          <ChevronRight className="w-4 h-4 ml-auto"/>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ─── Subscription Row ─────────────────────────────────────────────────────────
+function SubRow({
+  sub, pageTheme, onEmail, onExport, onClick,
+}: {
+  sub: Subscription;
+  pageTheme: typeof TIER_THEMES[TierKey];
+  onEmail: (s: Subscription) => void;
+  onExport: (s: Subscription) => void;
+  onClick: (s: Subscription) => void;
+}) {
+  const tierKey   = getTierKey(sub.plan_tier);
+  const tierTheme = TIER_THEMES[tierKey];
+  const isActive  = sub.plan_status === 'active';
+
+  return (
+    <div
+      className="rounded-2xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg cursor-pointer"
+      style={{ background: '#ffffff', border: `2px solid ${pageTheme.border}` }}
+      onClick={() => onClick(sub)}
+    >
+      <div className="flex items-center gap-5">
+
+        {/* Tier icon badge */}
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-md"
+          style={{ background: tierTheme.bg }}>
+          {tierKey === 'enterprise'   && <Crown       className="w-7 h-7 text-white"/>}
+          {tierKey === 'professional' && <Zap         className="w-7 h-7 text-white"/>}
+          {tierKey === 'basic'        && <CreditCard  className="w-7 h-7 text-white"/>}
+          {tierKey === 'trial'        && <Users       className="w-7 h-7 text-white"/>}
+        </div>
+
+        {/* Main info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-1 flex-wrap">
+            <h3 className="text-lg font-black text-slate-900">{sub.name || 'Unnamed'}</h3>
+
+            {/* Tier pill */}
+            <span className="px-3 py-1 rounded-full text-xs font-black"
+              style={{ background: tierTheme.bg, color: '#fff' }}>
+              {sub.plan_tier?.toUpperCase() || 'TRIAL'}
+            </span>
+
+            {/* Status pill */}
+            <span className="px-3 py-1 rounded-full text-xs font-black"
+              style={{
+                background: isActive ? '#14532d' : '#374151',
+                color: '#fff',
+              }}>
+              {isActive ? '● ACTIVE' : '○ INACTIVE'}
+            </span>
+          </div>
+          <p className="text-sm font-bold text-slate-600">{sub.email}</p>
+          {sub.company && <p className="text-sm font-bold text-slate-500 mt-0.5">{sub.company}</p>}
+        </div>
+
+        {/* Price + date */}
+        <div className="text-right flex-shrink-0">
+          <p className="text-xl font-black" style={{ color: pageTheme.text }}>
+            {getTierPrice(sub.plan_tier)}
+          </p>
+          <p className="text-sm font-bold text-slate-500 mt-0.5">
+            Since {formatDate(sub.created_at)}
+          </p>
+        </div>
+
+        {/* Action buttons — inline, no dropdown */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); onEmail(sub); }}
+            className="w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:scale-110"
+            style={{ background: '#1e3a8a', border: '2px solid #3b82f6' }}
+            title="Send Email">
+            <Mail className="w-4 h-4 text-white"/>
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onExport(sub); }}
+            className="w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:scale-110"
+            style={{ background: '#14532d', border: '2px solid #22c55e' }}
+            title="Export">
+            <FileText className="w-4 h-4 text-white"/>
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onClick(sub); }}
+            className="px-4 h-10 rounded-xl flex items-center gap-2 font-black text-sm transition-all hover:scale-105"
+            style={{ background: pageTheme.bg, color: '#fff', border: `2px solid ${pageTheme.accentDark}` }}>
+            View <ArrowRight className="w-3.5 h-3.5"/>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SubscriptionsPage() {
   const router = useRouter();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [stats, setStats] = useState<SubscriptionStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [tierFilter, setTierFilter] = useState('');
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [openDrillDown, setOpenDrillDown] = useState<string | null>(null);
+  const [stats,         setStats]         = useState<SubscriptionStats | null>(null);
+  const [loading,       setLoading]       = useState(true);
+  const [search,        setSearch]        = useState('');
+  const [activeTheme,   setActiveTheme]   = useState<TierKey>('all');
+
+  // Map theme key → API tier filter value
+  const tierFilterMap: Partial<Record<TierKey, string>> = {
+    trial: 'trial', basic: 'basic', professional: 'professional', enterprise: 'enterprise',
+  };
+  const tierFilter = tierFilterMap[activeTheme] ?? '';
 
   useEffect(() => {
-    fetchSubscriptions();
-    fetchStats();
-  }, [search, tierFilter]);
+    setLoading(true);
+    Promise.all([
+      fetch(`/api/subscriptions?limit=50${search ? `&search=${search}` : ''}${tierFilter ? `&tier=${tierFilter}` : ''}`).then(r => r.json()),
+      fetch('/api/subscriptions/stats').then(r => r.json()),
+    ]).then(([subData, statsData]) => {
+      setSubscriptions(subData.subscriptions || []);
+      setStats(statsData);
+    }).catch(console.error)
+      .finally(() => setLoading(false));
+  }, [search, activeTheme]);
 
-  const fetchSubscriptions = async () => {
-    try {
-      const params = new URLSearchParams({
-        limit: '50',
-        ...(search && { search }),
-        ...(tierFilter && { tier: tierFilter }),
-      });
-
-      const res = await fetch(`/api/subscriptions?${params}`);
-      const data = await res.json();
-
-      setSubscriptions(data.subscriptions || []);
-    } catch (error) {
-      console.error('Failed to fetch subscriptions:', error);
-    } finally {
-      setLoading(false);
-    }
+  const handleCardClick = (key: TierKey) => {
+    setActiveTheme(prev => prev === key ? 'all' : key);
   };
 
-  const fetchStats = async () => {
-    try {
-      const res = await fetch('/api/subscriptions/stats');
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
-    }
-  };
-
-  const getTierIcon = (tier: string | null) => {
-    switch (tier?.toLowerCase()) {
-      case 'enterprise':
-        return <Crown className="w-5 h-5 text-purple-600" />;
-      case 'professional':
-        return <Zap className="w-5 h-5 text-blue-600" />;
-      case 'basic':
-        return <CreditCard className="w-5 h-5 text-green-600" />;
-      default:
-        return <Users className="w-5 h-5 text-slate-600" />;
-    }
-  };
-
-  const getTierColor = (tier: string | null) => {
-    switch (tier?.toLowerCase()) {
-      case 'enterprise':
-        return 'bg-purple-100 text-purple-800';
-      case 'professional':
-        return 'bg-blue-100 text-blue-800';
-      case 'basic':
-        return 'bg-green-100 text-green-800';
-      default:
-        return 'bg-slate-100 text-slate-800';
-    }
-  };
-
-  const getTierPrice = (tier: string | null) => {
-    switch (tier?.toLowerCase()) {
-      case 'enterprise':
-        return 'Custom Pricing';
-      case 'professional':
-        return '$299/mo';
-      case 'basic':
-        return '$99/mo';
-      default:
-        return 'Free Trial';
-    }
-  };
+  const pageTheme = TIER_THEMES[activeTheme];
 
   if (loading) {
     return (
-      <div className="p-8">
+      <div className="min-h-screen p-8" style={{ background: '#f1f5f9' }}>
         <div className="animate-pulse space-y-6">
-          <div className="h-12 bg-slate-200 rounded w-48" />
-          <div className="grid grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-24 bg-slate-200 rounded" />
-            ))}
+          <div className="h-12 bg-slate-200 rounded-xl w-64"/>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(6)].map((_, i) => <div key={i} className="h-40 bg-slate-200 rounded-2xl"/>)}
           </div>
           <div className="space-y-3">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-20 bg-slate-200 rounded" />
-            ))}
+            {[...Array(5)].map((_, i) => <div key={i} className="h-24 bg-slate-200 rounded-2xl"/>)}
           </div>
         </div>
       </div>
@@ -149,406 +294,243 @@ export default function SubscriptionsPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      {/* Header */}
+    <div className="min-h-screen transition-colors duration-500 p-4 sm:p-6 lg:p-8"
+      style={{ background: pageTheme.bgLight }}>
+
+      {/* ── Page header ── */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 mb-2">Subscriptions</h1>
-        <p className="text-slate-600">Manage and monitor subscription tiers and billing</p>
-      </div>
-
-      {/* Stats Overview */}
-      {stats && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {/* Total Subscriptions */}
-            <button
-              onClick={() => setOpenDrillDown('totalSubscriptions')}
-              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-slate-300 transition cursor-pointer hover:scale-105 transform duration-200"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-slate-600">Total</span>
-                <Users className="w-4 h-4 text-slate-400" />
-              </div>
-              <p className="text-2xl font-bold text-slate-900">{stats.totalSubscriptions}</p>
-              <p className="text-xs text-slate-500 mt-1">Active subscriptions</p>
-              <p className="text-xs text-slate-400 mt-2">Click to see details</p>
-            </button>
-
-            {/* MRR */}
-            <button
-              onClick={() => setOpenDrillDown('mrr')}
-              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-green-300 transition cursor-pointer hover:scale-105 transform duration-200 relative group"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-slate-600">MRR</span>
-                  <span className="text-xs text-green-600 font-semibold">(Monthly)</span>
-                </div>
-                <TrendingUp className="w-4 h-4 text-green-600" />
-              </div>
-              <p className="text-2xl font-bold text-slate-900">
-                {formatCurrency(stats.monthlyRecurringRevenue)}
-              </p>
-              <p className="text-xs text-slate-500 mt-1">Recurring Monthly Revenue</p>
-              <p className="text-xs text-slate-400 mt-2">Click for breakdown</p>
-              {/* Tooltip on hover */}
-              <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-900 text-white text-xs rounded-lg p-2 whitespace-normal z-40 shadow-lg opacity-0 group-hover:opacity-100 transition pointer-events-none">
-                Total predictable revenue from all active subscriptions per month
-              </div>
-            </button>
-
-            {/* ARR */}
-            <button
-              onClick={() => setOpenDrillDown('arr')}
-              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-blue-300 transition cursor-pointer hover:scale-105 transform duration-200 relative group"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-slate-600">ARR</span>
-                  <span className="text-xs text-blue-600 font-semibold">(Annual)</span>
-                </div>
-                <BarChart3 className="w-4 h-4 text-blue-600" />
-              </div>
-              <p className="text-2xl font-bold text-slate-900">
-                {formatCurrency(stats.annualRecurringRevenue)}
-              </p>
-              <p className="text-xs text-slate-500 mt-1">Recurring Annual Revenue</p>
-              <p className="text-xs text-slate-400 mt-2">Click for breakdown</p>
-              {/* Tooltip on hover */}
-              <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-900 text-white text-xs rounded-lg p-2 whitespace-normal z-40 shadow-lg opacity-0 group-hover:opacity-100 transition pointer-events-none">
-                Total predictable annual revenue (MRR × 12)
-              </div>
-            </button>
-
-            {/* ARPU */}
-            <button
-              onClick={() => setOpenDrillDown('arpu')}
-              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-orange-300 transition cursor-pointer hover:scale-105 transform duration-200 relative group"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-slate-600">ARPU</span>
-                  <span className="text-xs text-orange-600 font-semibold">(Per User)</span>
-                </div>
-                <CreditCard className="w-4 h-4 text-orange-600" />
-              </div>
-              <p className="text-2xl font-bold text-slate-900">
-                {formatCurrency(stats.averageRevenuPerSubscription)}
-              </p>
-              <p className="text-xs text-slate-500 mt-1">Avg Revenue Per User</p>
-              <p className="text-xs text-slate-400 mt-2">Click for tier breakdown</p>
-              {/* Tooltip on hover */}
-              <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-900 text-white text-xs rounded-lg p-2 whitespace-normal z-40 shadow-lg opacity-0 group-hover:opacity-100 transition pointer-events-none">
-                Average revenue per paying subscriber (Total Revenue ÷ Active Subscriptions)
-              </div>
-            </button>
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md"
+            style={{ background: pageTheme.bg }}>
+            <CreditCard className="w-5 h-5 text-white"/>
           </div>
-
-          {/* Drill-Down Modals */}
-          <StatDrillDownModal
-            isOpen={openDrillDown === 'totalSubscriptions'}
-            title="Subscription Details"
-            subtitle="By subscription tier"
-            items={[
-              {
-                label: 'Enterprise',
-                value: stats.enterpriseCount,
-                color: 'border-purple-300 bg-purple-50 hover:bg-purple-100',
-                icon: <Crown className="w-4 h-4 text-purple-600" />,
-              },
-              {
-                label: 'Professional',
-                value: stats.professionalCount,
-                color: 'border-blue-300 bg-blue-50 hover:bg-blue-100',
-                icon: <Zap className="w-4 h-4 text-blue-600" />,
-              },
-              {
-                label: 'Basic',
-                value: stats.basicCount,
-                color: 'border-green-300 bg-green-50 hover:bg-green-100',
-                icon: <CreditCard className="w-4 h-4 text-green-600" />,
-              },
-              {
-                label: 'Trial',
-                value: stats.trialCount,
-                color: 'border-orange-300 bg-orange-50 hover:bg-orange-100',
-                icon: <Users className="w-4 h-4 text-orange-600" />,
-              },
-            ]}
-            onFilterClick={(tier) => {
-              setTierFilter(tier.toLowerCase());
-              setOpenDrillDown(null);
-            }}
-            onClose={() => setOpenDrillDown(null)}
-          />
-
-          <StatDrillDownModal
-            isOpen={openDrillDown === 'mrr'}
-            title="Monthly Recurring Revenue"
-            subtitle="Current MRR across all tiers"
-            items={[
-              {
-                label: 'Total MRR',
-                value: Math.round(stats.monthlyRecurringRevenue / 100),
-                color: 'border-green-300 bg-green-50 hover:bg-green-100',
-                icon: <TrendingUp className="w-4 h-4 text-green-600" />,
-              },
-            ]}
-            onClose={() => setOpenDrillDown(null)}
-          />
-
-          <StatDrillDownModal
-            isOpen={openDrillDown === 'arr'}
-            title="Annual Recurring Revenue"
-            subtitle="Current ARR across all tiers"
-            items={[
-              {
-                label: 'Total ARR',
-                value: Math.round(stats.annualRecurringRevenue / 100),
-                color: 'border-blue-300 bg-blue-50 hover:bg-blue-100',
-                icon: <BarChart3 className="w-4 h-4 text-blue-600" />,
-              },
-            ]}
-            onClose={() => setOpenDrillDown(null)}
-          />
-
-          <StatDrillDownModal
-            isOpen={openDrillDown === 'arpu'}
-            title="Average Revenue Per User"
-            subtitle="ARPU by subscription tier"
-            items={[
-              {
-                label: 'Overall ARPU',
-                value: Math.round(stats.averageRevenuPerSubscription / 100),
-                color: 'border-orange-300 bg-orange-50 hover:bg-orange-100',
-                icon: <CreditCard className="w-4 h-4 text-orange-600" />,
-              },
-            ]}
-            onClose={() => setOpenDrillDown(null)}
-          />
-        </>
-      )}
-
-      {/* Tier Breakdown Cards */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {/* Enterprise */}
-          <div className={`bg-gradient-to-br from-purple-50 to-white rounded-lg border-2 p-6 transition ${tierFilter === 'enterprise' ? 'border-purple-600 shadow-lg' : 'border-purple-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-slate-900">Enterprise</h3>
-              <Crown className="w-5 h-5 text-purple-600" />
-            </div>
-            <p className="text-3xl font-bold text-purple-600 mb-1">{stats.enterpriseCount}</p>
-            <p className="text-sm text-slate-600 mb-3">subscribers</p>
-            <button
-              onClick={() => {
-                setSearch('');
-                setTierFilter('enterprise');
-              }}
-              className={`w-full px-3 py-2 text-white text-sm font-medium rounded-lg transition ${tierFilter === 'enterprise' ? 'bg-purple-700 ring-2 ring-purple-300' : 'bg-purple-600 hover:bg-purple-700'}`}
-            >
-              {tierFilter === 'enterprise' ? '✓ Filtering' : 'View All'}
-            </button>
-          </div>
-
-          {/* Professional */}
-          <div className={`bg-gradient-to-br from-blue-50 to-white rounded-lg border-2 p-6 transition ${tierFilter === 'professional' ? 'border-blue-600 shadow-lg' : 'border-blue-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-slate-900">Professional</h3>
-              <Zap className="w-5 h-5 text-blue-600" />
-            </div>
-            <p className="text-3xl font-bold text-blue-600 mb-1">{stats.professionalCount}</p>
-            <p className="text-sm text-slate-600 mb-3">subscribers</p>
-            <button
-              onClick={() => {
-                setSearch('');
-                setTierFilter('professional');
-              }}
-              className={`w-full px-3 py-2 text-white text-sm font-medium rounded-lg transition ${tierFilter === 'professional' ? 'bg-blue-700 ring-2 ring-blue-300' : 'bg-blue-600 hover:bg-blue-700'}`}
-            >
-              {tierFilter === 'professional' ? '✓ Filtering' : 'View All'}
-            </button>
-          </div>
-
-          {/* Basic */}
-          <div className={`bg-gradient-to-br from-green-50 to-white rounded-lg border-2 p-6 transition ${tierFilter === 'basic' ? 'border-green-600 shadow-lg' : 'border-green-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-slate-900">Basic</h3>
-              <CreditCard className="w-5 h-5 text-green-600" />
-            </div>
-            <p className="text-3xl font-bold text-green-600 mb-1">{stats.basicCount}</p>
-            <p className="text-sm text-slate-600 mb-3">subscribers</p>
-            <button
-              onClick={() => {
-                setSearch('');
-                setTierFilter('basic');
-              }}
-              className={`w-full px-3 py-2 text-white text-sm font-medium rounded-lg transition ${tierFilter === 'basic' ? 'bg-green-700 ring-2 ring-green-300' : 'bg-green-600 hover:bg-green-700'}`}
-            >
-              {tierFilter === 'basic' ? '✓ Filtering' : 'View All'}
-            </button>
-          </div>
-
-          {/* Trial */}
-          <div className={`bg-gradient-to-br from-orange-50 to-white rounded-lg border-2 p-6 transition ${tierFilter === 'trial' ? 'border-orange-600 shadow-lg' : 'border-orange-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-slate-900">Trials</h3>
-              <Users className="w-5 h-5 text-orange-600" />
-            </div>
-            <p className="text-3xl font-bold text-orange-600 mb-1">{stats.trialCount}</p>
-            <p className="text-sm text-slate-600 mb-3">active trials</p>
-            <button
-              onClick={() => {
-                setSearch('');
-                setTierFilter('trial');
-              }}
-              className={`w-full px-3 py-2 text-white text-sm font-medium rounded-lg transition ${tierFilter === 'trial' ? 'bg-orange-700 ring-2 ring-orange-300' : 'bg-orange-600 hover:bg-orange-700'}`}
-            >
-              {tierFilter === 'trial' ? '✓ Filtering' : 'View All'}
-            </button>
-          </div>
+          <h1 className="text-4xl font-black transition-colors duration-300"
+            style={{ color: pageTheme.text }}>
+            {activeTheme === 'all' ? 'Subscriptions' : `${pageTheme.label} Subscriptions`}
+          </h1>
         </div>
-      )}
 
-      {/* Controls */}
-      <div className="bg-white rounded-lg border border-slate-200 p-4 mb-8">
-        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by email, company, name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
-          </div>
+        <p className="text-base font-bold ml-14" style={{ color: pageTheme.accentDark }}>
+          {activeTheme === 'all'
+            ? 'Click any tier card to filter — all changes happen inline, no popups'
+            : `Showing ${pageTheme.label.toLowerCase()} subscribers — click the card again to clear`}
+        </p>
 
-          {tierFilter && (
-            <button
-              onClick={() => setTierFilter('')}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-100 hover:bg-orange-200 text-orange-800 rounded-lg font-medium transition"
-            >
-              <Filter className="w-4 h-4" />
-              Filtering: {tierFilter.toUpperCase()}
-              <X className="w-4 h-4" />
-            </button>
+        {/* Breadcrumb + actions */}
+        <div className="flex items-center gap-3 mt-3 ml-14 flex-wrap">
+          {activeTheme !== 'all' && (
+            <>
+              <button onClick={() => setActiveTheme('all')}
+                className="text-sm font-black px-3 py-1.5 rounded-lg transition-all hover:opacity-80"
+                style={{ background: pageTheme.bg, color: '#fff' }}>
+                ← All Subscriptions
+              </button>
+              <ChevronRight className="w-4 h-4" style={{ color: pageTheme.accentDark }}/>
+              <span className="text-sm font-black" style={{ color: pageTheme.text }}>{pageTheme.label}</span>
+            </>
           )}
-
-          <button
-            onClick={() => router.push('/dashboard/outreach')}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition"
-          >
-            <Mail className="w-4 h-4" />
-            Contractor Outreach
+          <button onClick={() => router.push('/dashboard/outreach')}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl font-black text-sm transition-all hover:opacity-90 ml-auto"
+            style={{ background: '#ea580c', color: '#fff', border: '2px solid #c2410c' }}>
+            <Mail className="w-4 h-4"/> Contractor Outreach
           </button>
         </div>
       </div>
 
-      {/* Subscriptions List */}
-      {subscriptions.length === 0 ? (
-        <div className="text-center py-16">
-          <CreditCard className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-          <p className="text-slate-500 text-lg">No subscriptions found</p>
+      {/* ── Stat cards ── */}
+      {stats && (
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+          <StatCard themeKey="trial"        label="Trials"        value={String(stats.trialCount)}                          sub="Free trials"          icon={Users}       activeTheme={activeTheme} onClick={handleCardClick}/>
+          <StatCard themeKey="basic"        label="Basic"         value={String(stats.basicCount)}                          sub="$99/mo each"          icon={CreditCard}  activeTheme={activeTheme} onClick={handleCardClick}/>
+          <StatCard themeKey="professional" label="Professional"  value={String(stats.professionalCount)}                   sub="$299/mo each"         icon={Zap}         activeTheme={activeTheme} onClick={handleCardClick}/>
+          <StatCard themeKey="enterprise"   label="Enterprise"    value={String(stats.enterpriseCount)}                     sub="Custom pricing"       icon={Crown}       activeTheme={activeTheme} onClick={handleCardClick}/>
+          <StatCard themeKey="mrr"          label="MRR"           value={formatCurrency(stats.monthlyRecurringRevenue)}     sub="Monthly recurring"    icon={TrendingUp}  activeTheme={activeTheme} onClick={handleCardClick}/>
+          <StatCard themeKey="arr"          label="ARR"           value={formatCurrency(stats.annualRecurringRevenue)}      sub="Annual recurring"     icon={BarChart3}   activeTheme={activeTheme} onClick={handleCardClick}/>
         </div>
-      ) : (
-        <div className="space-y-4">
-          {subscriptions.map((sub) => (
-            <div
-              key={sub.id}
-              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition cursor-pointer"
-              onClick={() => router.push(`/dashboard/subscriptions/${sub.id}`)}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="font-semibold text-slate-900">
-                      {sub.name || 'Unnamed'}
-                    </h3>
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getTierColor(
-                        sub.plan_tier
-                      )}`}
-                    >
-                      {sub.plan_tier?.toUpperCase() || 'TRIAL'}
-                    </span>
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        sub.plan_status === 'active'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-slate-100 text-slate-800'
-                      }`}
-                    >
-                      {sub.plan_status?.toUpperCase() || 'INACTIVE'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-600">{sub.email}</p>
-                  {sub.company && (
-                    <p className="text-sm text-slate-500 mt-1">{sub.company}</p>
-                  )}
+      )}
+
+      {/* ── Inline expanded detail panel ── */}
+      {activeTheme !== 'all' && stats && (
+        <div className="mb-8 rounded-2xl p-6 transition-all duration-300"
+          style={{ background: pageTheme.bg, border: `3px solid ${pageTheme.accent}`, boxShadow: `0 8px 40px ${pageTheme.accent}33` }}>
+
+          <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+            <div>
+              <h2 className="text-3xl font-black text-white mb-1">{pageTheme.label} Overview</h2>
+              <p className="text-base font-bold text-white/70">Inline breakdown — no navigation needed</p>
+            </div>
+            <button onClick={() => setActiveTheme('all')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-sm"
+              style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '2px solid rgba(255,255,255,0.3)' }}>
+              <X className="w-4 h-4"/> Clear Filter
+            </button>
+          </div>
+
+          {/* Key metrics row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {activeTheme === 'mrr' || activeTheme === 'arr' ? (
+              <>
+                <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.2)' }}>
+                  <p className="text-sm font-black text-white/70 mb-1">Monthly Revenue</p>
+                  <p className="text-3xl font-black text-white">{formatCurrency(stats.monthlyRecurringRevenue)}</p>
+                  <p className="text-sm font-bold text-white/60 mt-1">MRR</p>
                 </div>
-
-                <div className="flex items-center gap-4 text-right">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">
-                      {getTierPrice(sub.plan_tier)}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Since {formatDate(sub.created_at)}
-                    </p>
-                  </div>
-
-                  <div className="relative">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenMenuId(openMenuId === sub.id ? null : sub.id);
-                      }}
-                      className="p-2 hover:bg-slate-50 rounded-lg transition text-slate-400 hover:text-slate-600"
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-
-                    {openMenuId === sub.id && (
-                      <div className="absolute right-0 top-full mt-1 bg-white rounded-lg border border-slate-200 shadow-lg z-10 min-w-48">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/dashboard/subscriptions/${sub.id}`);
-                            setOpenMenuId(null);
-                          }}
-                          className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 font-medium border-b border-slate-100 text-sm"
-                        >
-                          View Details
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Email functionality
-                            setOpenMenuId(null);
-                          }}
-                          className="w-full text-left px-4 py-2 hover:bg-blue-50 text-blue-600 text-sm"
-                        >
-                          <Mail className="w-3.5 h-3.5 inline mr-2" />
-                          Send Email
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Export functionality
-                            setOpenMenuId(null);
-                          }}
-                          className="w-full text-left px-4 py-2 hover:bg-green-50 text-green-600 text-sm"
-                        >
-                          <FileText className="w-3.5 h-3.5 inline mr-2" />
-                          Export
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.2)' }}>
+                  <p className="text-sm font-black text-white/70 mb-1">Annual Revenue</p>
+                  <p className="text-3xl font-black text-white">{formatCurrency(stats.annualRecurringRevenue)}</p>
+                  <p className="text-sm font-bold text-white/60 mt-1">ARR</p>
                 </div>
+                <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.2)' }}>
+                  <p className="text-sm font-black text-white/70 mb-1">Avg. per Sub</p>
+                  <p className="text-3xl font-black text-white">{formatCurrency(stats.averageRevenuPerSubscription)}</p>
+                  <p className="text-sm font-bold text-white/60 mt-1">ARPU</p>
+                </div>
+                <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.2)' }}>
+                  <p className="text-sm font-black text-white/70 mb-1">Conversion Rate</p>
+                  <p className="text-3xl font-black text-white">{stats.conversionRate.toFixed(1)}%</p>
+                  <p className="text-sm font-bold text-white/60 mt-1">Trial → Paid</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.2)' }}>
+                  <p className="text-sm font-black text-white/70 mb-1">
+                    {activeTheme === 'trial' ? 'Active Trials' : activeTheme === 'basic' ? 'Basic Users' : activeTheme === 'professional' ? 'Pro Users' : 'Enterprise Users'}
+                  </p>
+                  <p className="text-3xl font-black text-white">
+                    {activeTheme === 'trial' ? stats.trialCount : activeTheme === 'basic' ? stats.basicCount : activeTheme === 'professional' ? stats.professionalCount : stats.enterpriseCount}
+                  </p>
+                  <p className="text-sm font-bold text-white/60 mt-1">Total on this tier</p>
+                </div>
+                <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.2)' }}>
+                  <p className="text-sm font-black text-white/70 mb-1">Tier Revenue</p>
+                  <p className="text-3xl font-black text-white">
+                    {activeTheme === 'trial' ? '$0'
+                      : activeTheme === 'basic' ? formatCurrency(stats.basicCount * 99)
+                      : activeTheme === 'professional' ? formatCurrency(stats.professionalCount * 299)
+                      : 'Custom'}
+                  </p>
+                  <p className="text-sm font-bold text-white/60 mt-1">Monthly from tier</p>
+                </div>
+                <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.2)' }}>
+                  <p className="text-sm font-black text-white/70 mb-1">Total Subscribers</p>
+                  <p className="text-3xl font-black text-white">{stats.totalSubscriptions}</p>
+                  <p className="text-sm font-bold text-white/60 mt-1">All tiers</p>
+                </div>
+                <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.2)' }}>
+                  <p className="text-sm font-black text-white/70 mb-1">Conversion Rate</p>
+                  <p className="text-3xl font-black text-white">{stats.conversionRate.toFixed(1)}%</p>
+                  <p className="text-sm font-bold text-white/60 mt-1">Trial → Paid</p>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Tier price banner */}
+          {activeTheme !== 'mrr' && activeTheme !== 'arr' && activeTheme !== 'trial' && (
+            <div className="rounded-xl p-4 flex items-center gap-4"
+              style={{ background: 'rgba(255,255,255,0.08)', border: '2px solid rgba(255,255,255,0.15)' }}>
+              <DollarSign className="w-8 h-8 text-white/60 flex-shrink-0"/>
+              <div>
+                <p className="text-sm font-black text-white/70 uppercase tracking-widest">Plan Price</p>
+                <p className="text-2xl font-black text-white">{getTierPrice(activeTheme)}</p>
+              </div>
+              <div className="ml-auto">
+                <p className="text-sm font-black text-white/70 uppercase tracking-widest">Showing</p>
+                <p className="text-2xl font-black text-white">{subscriptions.length} subscribers</p>
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Search + active filter indicator ── */}
+      <div className="mb-6 flex flex-col sm:flex-row gap-3 items-stretch">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: pageTheme.accentDark }}/>
+          <input
+            type="text"
+            placeholder="Search by name, email, or company…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-12 pr-4 py-4 rounded-2xl text-base font-bold text-slate-900 placeholder-slate-400 focus:outline-none transition-all"
+            style={{
+              background: '#ffffff',
+              border: `2px solid ${pageTheme.border}`,
+              boxShadow: `0 0 0 0px ${pageTheme.accent}`,
+            }}
+          />
+          {search && (
+            <button onClick={() => setSearch('')}
+              className="absolute right-4 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: pageTheme.bg }}>
+              <X className="w-4 h-4 text-white"/>
+            </button>
+          )}
+        </div>
+
+        {/* Active filter pill */}
+        {activeTheme !== 'all' && (
+          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl font-black text-base"
+            style={{ background: pageTheme.bg, color: '#fff', border: `2px solid ${pageTheme.accentDark}` }}>
+            <span>Filter: {pageTheme.label}</span>
+            <button onClick={() => setActiveTheme('all')}
+              className="w-6 h-6 rounded-lg flex items-center justify-center"
+              style={{ background: 'rgba(255,255,255,0.2)' }}>
+              <X className="w-3.5 h-3.5"/>
+            </button>
+          </div>
+        )}
+
+        <button onClick={() => { setSearch(''); setActiveTheme('all'); }}
+          className="flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-base transition-all hover:opacity-90"
+          style={{ background: '#ffffff', color: pageTheme.text, border: `2px solid ${pageTheme.border}` }}>
+          <RefreshCw className="w-4 h-4"/> Reset
+        </button>
+      </div>
+
+      {/* ── Subscription results count ── */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-base font-black" style={{ color: pageTheme.text }}>
+          {subscriptions.length === 0 ? 'No results' : `${subscriptions.length} subscription${subscriptions.length !== 1 ? 's' : ''}`}
+          {activeTheme !== 'all' ? ` · ${pageTheme.label}` : ''}
+          {search ? ` matching "${search}"` : ''}
+        </p>
+        {subscriptions.length > 0 && (
+          <p className="text-sm font-bold" style={{ color: pageTheme.accentDark }}>
+            Click any row to open details
+          </p>
+        )}
+      </div>
+
+      {/* ── Subscription list ── */}
+      {subscriptions.length === 0 ? (
+        <div className="rounded-2xl py-20 text-center"
+          style={{ background: '#ffffff', border: `3px solid ${pageTheme.border}` }}>
+          <CreditCard className="w-16 h-16 mx-auto mb-4" style={{ color: pageTheme.border }}/>
+          <p className="text-xl font-black mb-2" style={{ color: pageTheme.text }}>No subscriptions found</p>
+          <p className="text-base font-bold" style={{ color: pageTheme.accentDark }}>
+            {search ? `No results for "${search}"` : `No ${activeTheme !== 'all' ? pageTheme.label : ''} subscriptions yet`}
+          </p>
+          {(search || activeTheme !== 'all') && (
+            <button onClick={() => { setSearch(''); setActiveTheme('all'); }}
+              className="mt-6 px-6 py-3 rounded-xl font-black text-white"
+              style={{ background: pageTheme.bg }}>
+              Clear Filters
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {subscriptions.map(sub => (
+            <SubRow
+              key={sub.id}
+              sub={sub}
+              pageTheme={pageTheme}
+              onEmail={s  => { /* email logic */ }}
+              onExport={s => { /* export logic */ }}
+              onClick={s  => router.push(`/dashboard/subscriptions/${s.id}`)}
+            />
           ))}
         </div>
       )}
