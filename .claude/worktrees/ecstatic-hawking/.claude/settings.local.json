@@ -15,7 +15,10 @@
       "Bash(findstr:*)",
       "Bash(node debug-db.js:*)",
       "Bash(npx prisma db execute:*)",
-      "Bash(npx prisma:*)"
+      "Bash(npx prisma:*)",
+      "Bash(pkill:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 32604 -Force\")"
     ]
   }
 }

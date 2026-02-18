@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Mail, ArrowLeft } from 'lucide-react';
+import LoginSidebar from '@/components/LoginSidebar';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -81,9 +82,9 @@ export default function LoginPage() {
   // Show forgot password modal
   if (showForgotPassword) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-900 via-slate-900 to-orange-900">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-900 via-slate-900 to-orange-900 px-4">
         <div className="w-full max-w-md">
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-orange-500/50">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 border border-slate-200 dark:border-slate-700">
             {/* Header */}
             <div className="flex items-center gap-3 mb-8">
               <button
@@ -91,21 +92,21 @@ export default function LoginPage() {
                   setShowForgotPassword(false);
                   setRecoveryMessage('');
                 }}
-                className="text-orange-400 hover:text-orange-300 transition"
+                className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 transition"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <h2 className="text-2xl font-bold text-white">Reset Password</h2>
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Reset Password</h2>
             </div>
 
-            <p className="text-slate-300 mb-6">
+            <p className="text-slate-600 dark:text-slate-300 mb-6">
               Enter your email address and we'll send you instructions to reset your password.
             </p>
 
             {/* Recovery Form */}
             <form onSubmit={handlePasswordRecovery} className="space-y-4">
               <div>
-                <label htmlFor="recovery-email" className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="recovery-email" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Email Address
                 </label>
                 <input
@@ -114,7 +115,7 @@ export default function LoginPage() {
                   value={recoveryEmail}
                   onChange={(e) => setRecoveryEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   placeholder="admin@precisegovcon.com"
                 />
               </div>
@@ -122,8 +123,8 @@ export default function LoginPage() {
               {recoveryMessage && (
                 <div className={`p-4 rounded-lg ${
                   recoveryMessage.includes('sent')
-                    ? 'bg-green-500/10 border border-green-500/50 text-green-400'
-                    : 'bg-red-500/10 border border-red-500/50 text-red-400'
+                    ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
+                    : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
                 }`}>
                   <p className="text-sm">{recoveryMessage}</p>
                 </div>
@@ -132,7 +133,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={recoveryLoading}
-                className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
               >
                 <Mail className="w-4 h-4" />
                 {recoveryLoading ? 'Sending...' : 'Send Recovery Email'}
@@ -144,111 +145,119 @@ export default function LoginPage() {
     );
   }
 
+  // Main login page with two-column layout
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-900 via-slate-900 to-orange-900">
-      <div className="w-full max-w-md">
-        <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-orange-500/50">
-          {/* Logo */}
-          <div className="flex justify-center mb-4">
-            <img
-              src="/logo.png"
-              alt="PreciseGovCon Logo"
-              className="h-12 w-auto object-contain rounded"
-            />
-          </div>
-
-          {/* Title */}
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-orange-400 to-white bg-clip-text text-transparent">
-              Precise Govcon Admin Portal
-            </h1>
-            <p className="text-slate-400">Secure platform management</p>
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-lg">
-              <p className="text-red-400 text-sm">{error}</p>
-            </div>
-          )}
-
-          {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="admin@preciseanalytics.ai"
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex items-center justify-center">
+      <div className="w-full h-screen lg:h-auto lg:max-h-screen grid grid-cols-1 lg:grid-cols-2 gap-0">
+        {/* Left Column - Login Form */}
+        <div className="flex items-center justify-center px-6 py-12 lg:py-0 lg:min-h-screen">
+          <div className="w-full max-w-sm">
+            {/* Logo */}
+            <div className="flex justify-center mb-6">
+              <img
+                src="/logo.png"
+                alt="PreciseGovCon Logo"
+                className="h-12 w-auto object-contain rounded"
               />
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
-                Password
-              </label>
-              <div className="relative">
+            {/* Title */}
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold mb-2 text-slate-900 dark:text-white">
+                Precise Govcon
+              </h1>
+              <p className="text-slate-600 dark:text-slate-400 text-sm">Admin Portal</p>
+              <p className="text-slate-500 dark:text-slate-500 text-xs mt-1">Enterprise Management Platform</p>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
+              </div>
+            )}
+
+            {/* Login Form */}
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label htmlFor="email" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                  Email Address
+                </label>
                 <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-12"
-                  placeholder="••••••••"
+                  className="w-full max-w-xs px-4 py-3 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+                  placeholder="admin@precisegovcon.com"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent pr-12 transition-all"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-105"
+              >
+                {isLoading ? 'Signing in...' : 'Sign In'}
+              </button>
+
+              <div className="text-center pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 text-sm font-medium transition-colors"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
+                  Forgot Password?
                 </button>
               </div>
+            </form>
+
+            {/* Security Footer */}
+            <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+              <p className="text-xs text-slate-500 dark:text-slate-400 text-center flex items-center justify-center gap-1">
+                <span className="inline-block text-orange-500">🔒</span>
+                Protected by IP whitelisting and JWT authentication
+              </p>
             </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Signing in...' : 'Sign In'}
-            </button>
-
-            <div className="text-center mt-4">
-              <button
-                type="button"
-                onClick={() => setShowForgotPassword(true)}
-                className="text-orange-400 hover:text-orange-300 text-sm font-medium transition-colors"
-              >
-                Forgot Password?
-              </button>
-            </div>
-          </form>
-
-          {/* Footer */}
-          <div className="mt-8 text-center">
-            <p className="text-xs text-slate-500 flex items-center justify-center gap-1">
-              <span className="inline-block w-4 h-4 text-orange-500">🔒</span>
-              Protected by IP whitelisting and JWT authentication
-            </p>
           </div>
         </div>
 
-        <p className="text-center text-slate-500 text-sm mt-6">
-          © 2025 Precise Govcon • All rights reserved
-        </p>
+        {/* Right Column - Welcome Sidebar (Hidden on mobile) */}
+        <div className="hidden lg:flex items-center justify-center min-h-screen bg-gradient-to-br from-orange-50 to-blue-50 dark:from-slate-800 dark:to-slate-700">
+          <div className="w-full h-full flex flex-col px-8">
+            <LoginSidebar />
+          </div>
+        </div>
       </div>
     </div>
   );
