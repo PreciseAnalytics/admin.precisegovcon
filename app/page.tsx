@@ -49,19 +49,28 @@ export default function LoginPage() {
     setRecoveryLoading(true);
 
     try {
-      // In production, this would send a recovery email
-      // For now, we'll show a mock success message
       if (!recoveryEmail) {
         setRecoveryMessage('Please enter your email address');
+        setRecoveryLoading(false);
         return;
       }
 
-      // Simulate sending recovery email
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: recoveryEmail }),
+      });
 
-      setRecoveryMessage(`Recovery instructions have been sent to ${recoveryEmail}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setRecoveryMessage(data.error || 'Failed to send recovery email. Please try again.');
+        return;
+      }
+
+      setRecoveryMessage('Password reset instructions have been sent to your email. Please check your inbox.');
       setRecoveryEmail('');
-      setTimeout(() => setShowForgotPassword(false), 2000);
+      setTimeout(() => setShowForgotPassword(false), 3000);
     } catch (err) {
       setRecoveryMessage('Failed to send recovery email. Please try again.');
     } finally {
