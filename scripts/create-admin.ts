@@ -5,8 +5,8 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function createAdmin() {
-  const email = 'admin@preciseanalytics.ai';
-  const password = 'AdminPass123!';
+  const email = 'admin@preciseanalytics.io';
+  const password = 'Kipkogei04';
   const name = 'System Administrator';
   const role = 'SUPER_ADMIN';
 
