@@ -16,6 +16,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import StatDrillDownModal from '@/components/StatDrillDownModal';
 
 interface Subscription {
   id: string;
@@ -49,6 +50,7 @@ export default function SubscriptionsPage() {
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openDrillDown, setOpenDrillDown] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSubscriptions();
@@ -155,53 +157,154 @@ export default function SubscriptionsPage() {
 
       {/* Stats Overview */}
       {stats && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {/* Total Subscriptions */}
-          <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-slate-600">Total</span>
-              <Users className="w-4 h-4 text-slate-400" />
-            </div>
-            <p className="text-2xl font-bold text-slate-900">{stats.totalSubscriptions}</p>
-            <p className="text-xs text-slate-500 mt-1">Active subscriptions</p>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {/* Total Subscriptions */}
+            <button
+              onClick={() => setOpenDrillDown('totalSubscriptions')}
+              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-slate-300 transition cursor-pointer hover:scale-105 transform duration-200"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-slate-600">Total</span>
+                <Users className="w-4 h-4 text-slate-400" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900">{stats.totalSubscriptions}</p>
+              <p className="text-xs text-slate-500 mt-1">Active subscriptions</p>
+              <p className="text-xs text-slate-400 mt-2">Click to see details</p>
+            </button>
+
+            {/* MRR */}
+            <button
+              onClick={() => setOpenDrillDown('mrr')}
+              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-green-300 transition cursor-pointer hover:scale-105 transform duration-200"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-slate-600">MRR</span>
+                <TrendingUp className="w-4 h-4 text-green-600" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900">
+                {formatCurrency(stats.monthlyRecurringRevenue)}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Monthly recurring revenue</p>
+              <p className="text-xs text-slate-400 mt-2">Click for breakdown</p>
+            </button>
+
+            {/* ARR */}
+            <button
+              onClick={() => setOpenDrillDown('arr')}
+              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-blue-300 transition cursor-pointer hover:scale-105 transform duration-200"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-slate-600">ARR</span>
+                <BarChart3 className="w-4 h-4 text-blue-600" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900">
+                {formatCurrency(stats.annualRecurringRevenue)}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Annual recurring revenue</p>
+              <p className="text-xs text-slate-400 mt-2">Click for breakdown</p>
+            </button>
+
+            {/* ARPU */}
+            <button
+              onClick={() => setOpenDrillDown('arpu')}
+              className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-orange-300 transition cursor-pointer hover:scale-105 transform duration-200"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-slate-600">ARPU</span>
+                <CreditCard className="w-4 h-4 text-orange-600" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900">
+                {formatCurrency(stats.averageRevenuPerSubscription)}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Avg revenue per user</p>
+              <p className="text-xs text-slate-400 mt-2">Click for tier breakdown</p>
+            </button>
           </div>
 
-          {/* MRR */}
-          <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-slate-600">MRR</span>
-              <TrendingUp className="w-4 h-4 text-green-600" />
-            </div>
-            <p className="text-2xl font-bold text-slate-900">
-              {formatCurrency(stats.monthlyRecurringRevenue)}
-            </p>
-            <p className="text-xs text-slate-500 mt-1">Monthly recurring</p>
-          </div>
+          {/* Drill-Down Modals */}
+          <StatDrillDownModal
+            isOpen={openDrillDown === 'totalSubscriptions'}
+            title="Subscription Details"
+            subtitle="By subscription tier"
+            items={[
+              {
+                label: 'Enterprise',
+                value: stats.enterpriseCount,
+                color: 'border-purple-300 bg-purple-50 hover:bg-purple-100',
+                icon: <Crown className="w-4 h-4 text-purple-600" />,
+              },
+              {
+                label: 'Professional',
+                value: stats.professionalCount,
+                color: 'border-blue-300 bg-blue-50 hover:bg-blue-100',
+                icon: <Zap className="w-4 h-4 text-blue-600" />,
+              },
+              {
+                label: 'Basic',
+                value: stats.basicCount,
+                color: 'border-green-300 bg-green-50 hover:bg-green-100',
+                icon: <CreditCard className="w-4 h-4 text-green-600" />,
+              },
+              {
+                label: 'Trial',
+                value: stats.trialCount,
+                color: 'border-orange-300 bg-orange-50 hover:bg-orange-100',
+                icon: <Users className="w-4 h-4 text-orange-600" />,
+              },
+            ]}
+            onFilterClick={(tier) => {
+              setTierFilter(tier.toLowerCase());
+              setOpenDrillDown(null);
+            }}
+            onClose={() => setOpenDrillDown(null)}
+          />
 
-          {/* ARR */}
-          <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-slate-600">ARR</span>
-              <BarChart3 className="w-4 h-4 text-blue-600" />
-            </div>
-            <p className="text-2xl font-bold text-slate-900">
-              {formatCurrency(stats.annualRecurringRevenue)}
-            </p>
-            <p className="text-xs text-slate-500 mt-1">Annual recurring</p>
-          </div>
+          <StatDrillDownModal
+            isOpen={openDrillDown === 'mrr'}
+            title="Monthly Recurring Revenue"
+            subtitle="Current MRR across all tiers"
+            items={[
+              {
+                label: 'Total MRR',
+                value: Math.round(stats.monthlyRecurringRevenue / 100),
+                color: 'border-green-300 bg-green-50 hover:bg-green-100',
+                icon: <TrendingUp className="w-4 h-4 text-green-600" />,
+              },
+            ]}
+            onClose={() => setOpenDrillDown(null)}
+          />
 
-          {/* ARPU */}
-          <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-slate-600">ARPU</span>
-              <CreditCard className="w-4 h-4 text-orange-600" />
-            </div>
-            <p className="text-2xl font-bold text-slate-900">
-              {formatCurrency(stats.averageRevenuPerSubscription)}
-            </p>
-            <p className="text-xs text-slate-500 mt-1">Per user average</p>
-          </div>
-        </div>
+          <StatDrillDownModal
+            isOpen={openDrillDown === 'arr'}
+            title="Annual Recurring Revenue"
+            subtitle="Current ARR across all tiers"
+            items={[
+              {
+                label: 'Total ARR',
+                value: Math.round(stats.annualRecurringRevenue / 100),
+                color: 'border-blue-300 bg-blue-50 hover:bg-blue-100',
+                icon: <BarChart3 className="w-4 h-4 text-blue-600" />,
+              },
+            ]}
+            onClose={() => setOpenDrillDown(null)}
+          />
+
+          <StatDrillDownModal
+            isOpen={openDrillDown === 'arpu'}
+            title="Average Revenue Per User"
+            subtitle="ARPU by subscription tier"
+            items={[
+              {
+                label: 'Overall ARPU',
+                value: Math.round(stats.averageRevenuPerSubscription / 100),
+                color: 'border-orange-300 bg-orange-50 hover:bg-orange-100',
+                icon: <CreditCard className="w-4 h-4 text-orange-600" />,
+              },
+            ]}
+            onClose={() => setOpenDrillDown(null)}
+          />
+        </>
       )}
 
       {/* Tier Breakdown Cards */}
