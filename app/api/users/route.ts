@@ -75,19 +75,8 @@ export async function GET(request: NextRequest) {
       prisma.user.count({ where }),
     ]);
 
-    // Transform the data to match frontend expectations
-    const transformedUsers = users.map(user => ({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      companyName: user.company,
-      subscriptionTier: user.plan_tier || 'FREE',
-      subscriptionStatus: user.plan_status || 'INACTIVE',
-      isActive: user.is_active ?? true,
-      isSuspended: user.is_suspended ?? false,
-      createdAt: user.created_at.toISOString(),
-      lastLoginAt: user.last_login_at?.toISOString() || null,
-    }));
+    // Users returned as-is from database
+    const transformedUsers = users;
 
     return NextResponse.json({
       users: transformedUsers,

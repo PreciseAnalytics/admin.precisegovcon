@@ -150,10 +150,10 @@ export default function LoginPage() {
 
           {/* Title */}
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">
-              Precise Govcon Admin
+            <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-orange-400 to-white bg-clip-text text-transparent">
+              Precise Govcon Admin Portal
             </h1>
-            <p className="text-slate-400">Secure portal for platform management</p>
+            <p className="text-slate-400">Secure platform management</p>
           </div>
 
           {/* Error Message */}
