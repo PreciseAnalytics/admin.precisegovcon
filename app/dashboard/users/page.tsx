@@ -597,14 +597,30 @@ export default function UsersPage() {
                         <td className="px-6 py-4 text-sm text-slate-600">{user.email}</td>
                         <td className="px-6 py-4 text-sm text-slate-600">{user.company || '-'}</td>
                         <td className="px-6 py-4">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getTierBadgeColor(user.plan_tier)}`}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTierFilter(user.plan_tier || '');
+                              setPage(1);
+                            }}
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getTierBadgeColor(user.plan_tier)}`}
+                            title="Filter by tier"
+                          >
                             {user.plan_tier?.charAt(0).toUpperCase() + user.plan_tier?.slice(1) || 'Free'}
-                          </span>
+                          </button>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusBadgeColor(user.plan_status)}`}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStatusFilter(user.plan_status || '');
+                              setPage(1);
+                            }}
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getStatusBadgeColor(user.plan_status)}`}
+                            title="Filter by status"
+                          >
                             {user.plan_status?.charAt(0).toUpperCase() + user.plan_status?.slice(1) || 'Inactive'}
-                          </span>
+                          </button>
                         </td>
                         <td className="px-6 py-4 text-sm text-slate-600">{formatDate(user.created_at)}</td>
                         <td className="px-6 py-4 text-right">
@@ -702,14 +718,30 @@ export default function UsersPage() {
                   <td className="px-6 py-4 text-sm text-slate-600">{user.email}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{user.company || '-'}</td>
                   <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getTierBadgeColor(user.plan_tier)}`}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTierFilter(user.plan_tier || '');
+                        setPage(1);
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getTierBadgeColor(user.plan_tier)}`}
+                      title="Filter by tier"
+                    >
                       {user.plan_tier?.charAt(0).toUpperCase() + user.plan_tier?.slice(1) || 'Free'}
-                    </span>
+                    </button>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusBadgeColor(user.plan_status)}`}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setStatusFilter(user.plan_status || '');
+                        setPage(1);
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer ${getStatusBadgeColor(user.plan_status)}`}
+                      title="Filter by status"
+                    >
                       {user.plan_status?.charAt(0).toUpperCase() + user.plan_status?.slice(1) || 'Inactive'}
-                    </span>
+                    </button>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">{formatDate(user.created_at)}</td>
                   <td className="px-6 py-4 text-right">
