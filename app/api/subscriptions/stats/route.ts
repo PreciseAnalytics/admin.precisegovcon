@@ -16,19 +16,19 @@ export async function GET(request: NextRequest) {
       activeSubscriptions,
     ] = await Promise.all([
       prisma.user.count(),
-      prisma.user.count({ where: { plan_tier: 'trial' } }),
-      prisma.user.count({ where: { plan_tier: 'basic' } }),
-      prisma.user.count({ where: { plan_tier: 'professional' } }),
-      prisma.user.count({ where: { plan_tier: 'enterprise' } }),
-      prisma.user.count({ where: { plan_status: 'active' } }),
+      prisma.user.count({ where: { plan_status: { equals: 'trialing', mode: 'insensitive' } } }),
+      prisma.user.count({ where: { plan_tier: { equals: 'BASIC', mode: 'insensitive' } } }),
+      prisma.user.count({ where: { plan_tier: { equals: 'PROFESSIONAL', mode: 'insensitive' } } }),
+      prisma.user.count({ where: { plan_tier: { equals: 'ENTERPRISE', mode: 'insensitive' } } }),
+      prisma.user.count({ where: { plan_status: { equals: 'active', mode: 'insensitive' } } }),
     ]);
 
     // Calculate revenue metrics (mock pricing)
     const tierPrices: Record<string, number> = {
-      trial: 0,
-      basic: 99,
-      professional: 299,
-      enterprise: 5000, // Custom pricing, using average
+      trialing: 0,
+      BASIC: 99,
+      PROFESSIONAL: 299,
+      ENTERPRISE: 5000, // Custom pricing, using average
     };
 
     const monthlyRecurringRevenue =
