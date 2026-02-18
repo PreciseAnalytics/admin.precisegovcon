@@ -21,26 +21,33 @@ model AdminUser {
 }
 
 model User {
-  id                     String    @id @default(cuid())
-  email                  String    @unique
-  name                   String?
-  company                String?
-  plan                   String?
-  plan_status            String?
-  plan_tier              String?
-  stripe_customer_id     String?   @unique
-  stripe_subscription_id String?   @unique
-  created_at             DateTime  @default(now())
-  updated_at             DateTime  @updatedAt
-  password               String?
-  last_login_at          DateTime?
-  is_active              Boolean?  @default(true)
-  is_suspended           Boolean?  @default(false)
+  id                        String    @id @default(cuid())
+  email                     String    @unique
+  name                      String?
+  firstName                 String?
+  lastName                  String?
+  company                   String?
+  phone                     String?
+  plan                      String?
+  plan_status               String?
+  plan_tier                 String?
+  stripe_customer_id        String?   @unique
+  stripe_subscription_id    String?   @unique
+  created_at                DateTime  @default(now())
+  updated_at                DateTime  @updatedAt
+  password                  String?
+  last_login_at             DateTime?
+  is_active                 Boolean?  @default(true)
+  is_suspended              Boolean?  @default(false)
+  email_verified            Boolean   @default(false)
+  email_verification_token  String?   @unique
+  email_verification_expires DateTime?
 
   @@index([email])
   @@index([stripe_customer_id])
   @@index([plan_status])
   @@index([plan_tier])
+  @@index([email_verified])
   @@map("users")
 }
 

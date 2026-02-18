@@ -73,6 +73,7 @@ export async function createEmailCodeInvitation(
   options: InvitationOptions & { adminId: string }
 ): Promise<GeneratedCredentials> {
   const activationCode = generateActivationCode();
+  const temporaryPassword = generateSecurePassword();
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + (options.expiresInDays || 7));
 
@@ -80,6 +81,7 @@ export async function createEmailCodeInvitation(
   // For now, return the credentials
   return {
     email: options.email,
+    temporaryPassword,
     activationCode,
     expiresAt,
   };
