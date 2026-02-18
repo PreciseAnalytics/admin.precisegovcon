@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git reset:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nImplement comprehensive admin portal features with bug fixes\n\nMajor Features Added:\n- Complete redesign of users page with modern card-based grid layout\n- Subscribers page with subscription tier categorization \\(Trial, Basic, Professional, Enterprise\\)\n- Contractor outreach system for SAM.gov integration and bulk email campaigns\n- Email notifications on user signup and password reset\n- Interactive dashboard elements \\(clickable cards, badges for filtering\\)\n- Subscription analytics \\(MRR, ARR, ARPU\\) with stats dashboard\n\nBug Fixes:\n- Fixed database password field error in user delete/suspend operations\n  * Added explicit select clauses to DELETE and PATCH endpoints\n  * Prevents Prisma from querying non-existent password field on users table\n\nNew APIs Created:\n- /api/subscriptions/stats - Subscription metrics and analytics\n- /api/outreach/contractors - SAM.gov contractor discovery \\(ready for API integration\\)\n- /api/outreach/stats - Outreach campaign statistics\n- /api/outreach/templates - Email template management \\(pre-built templates\\)\n- /api/outreach/generate-template - AI-powered email generation \\(Claude API ready\\)\n- /api/outreach/send-emails - Bulk email campaign delivery with personalization\n\nComponents & Utilities:\n- lib/email.ts - Complete email service with HTML templates\n- components/UserActionsDropdown.tsx - Action menu for user management\n- Improved routing and navigation with Mail icon for outreach\n\nUI/UX Improvements:\n- Modern card-based layouts with hover effects and gradients\n- Color-coded status indicators and tier badges\n- Responsive grid designs \\(1-3 columns\\)\n- Interactive elements with filtering capabilities\n- Professional HTML email templates with PreciseGovCon branding\n\nThe admin portal now provides enterprise-level features for:\n- User management with deletion/suspension/password reset\n- Subscription tracking and metrics analysis\n- Contractor outreach and sales funnel management\n- Comprehensive audit logging of all admin actions\n- Email communication with automated templates\n\nCo-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(xargs:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

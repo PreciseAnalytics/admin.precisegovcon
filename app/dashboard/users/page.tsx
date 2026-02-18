@@ -557,7 +557,7 @@ export default function UsersPage() {
                   title="Filter by tier"
                 >
                   {getTierIcon(user.plan_tier)}
-                  {user.plan_tier?.charAt(0).toUpperCase() + user.plan_tier?.slice(1) || 'Free'}
+                  {user.plan_tier ? user.plan_tier.charAt(0).toUpperCase() + user.plan_tier.slice(1) : 'Free'}
                 </button>
 
                 <button
@@ -570,7 +570,7 @@ export default function UsersPage() {
                   title="Filter by status"
                 >
                   {getStatusIcon(user.plan_status)}
-                  {user.plan_status?.charAt(0).toUpperCase() + user.plan_status?.slice(1) || 'Inactive'}
+                  {user.plan_status ? user.plan_status.charAt(0).toUpperCase() + user.plan_status.slice(1) : 'Inactive'}
                 </button>
 
                 {user.is_suspended && (
@@ -646,7 +646,7 @@ export default function UsersPage() {
                             title="Filter by tier"
                           >
                             {getTierIcon(user.plan_tier)}
-                            {user.plan_tier?.charAt(0).toUpperCase() + user.plan_tier?.slice(1) || 'Free'}
+                            {user.plan_tier ? user.plan_tier.charAt(0).toUpperCase() + user.plan_tier.slice(1) : 'Free'}
                           </button>
                         </td>
                         <td className="px-6 py-4">
@@ -660,7 +660,7 @@ export default function UsersPage() {
                             title="Filter by status"
                           >
                             {getStatusIcon(user.plan_status)}
-                            {user.plan_status?.charAt(0).toUpperCase() + user.plan_status?.slice(1) || 'Inactive'}
+                            {user.plan_status ? user.plan_status.charAt(0).toUpperCase() + user.plan_status.slice(1) : 'Inactive'}
                           </button>
                         </td>
                         <td className="px-6 py-4 text-sm text-slate-600">{formatDate(user.created_at)}</td>
@@ -769,7 +769,7 @@ export default function UsersPage() {
                       title="Filter by tier"
                     >
                       {getTierIcon(user.plan_tier)}
-                      {user.plan_tier?.charAt(0).toUpperCase() + user.plan_tier?.slice(1) || 'Free'}
+                      {user.plan_tier ? user.plan_tier.charAt(0).toUpperCase() + user.plan_tier.slice(1) : 'Free'}
                     </button>
                   </td>
                   <td className="px-6 py-4">
@@ -783,7 +783,7 @@ export default function UsersPage() {
                       title="Filter by status"
                     >
                       {getStatusIcon(user.plan_status)}
-                      {user.plan_status?.charAt(0).toUpperCase() + user.plan_status?.slice(1) || 'Inactive'}
+                      {user.plan_status ? user.plan_status.charAt(0).toUpperCase() + user.plan_status.slice(1) : 'Inactive'}
                     </button>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">{formatDate(user.created_at)}</td>
@@ -893,7 +893,7 @@ export default function UsersPage() {
       )}
 
       {/* Add User Modal */}
-      <AddUserModal open={showAddUserModal} onClose={() => setShowAddUserModal(false)} onSuccess={() => fetchUsers()} />
+      <AddUserModal isOpen={showAddUserModal} onClose={() => setShowAddUserModal(false)} onSuccess={() => fetchUsers()} />
     </div>
   );
 }

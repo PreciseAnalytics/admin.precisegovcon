@@ -446,9 +446,9 @@ export default function OutreachPage() {
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-slate-900">{contractor.name}</h4>
                   <p className="text-sm text-slate-600">{contractor.email}</p>
-                  {contractor.company && (
+                  {contractor.dba && (
                     <p className="text-xs text-slate-500 mt-1">
-                      {contractor.company}
+                      {contractor.dba}
                     </p>
                   )}
                 </div>
