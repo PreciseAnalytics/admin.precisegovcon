@@ -1,11 +1,20 @@
--- CreateEnum
-CREATE TYPE "AdminRole" AS ENUM ('SUPER_ADMIN', 'ADMIN', 'VIEWER');
+-- CreateEnum (skip if already exists)
+DO $$ BEGIN
+    CREATE TYPE "AdminRole" AS ENUM ('SUPER_ADMIN', 'ADMIN', 'VIEWER');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
--- CreateEnum
-CREATE TYPE "PlanStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'TRIALING', 'PAST_DUE', 'CANCELED', 'UNPAID');
+-- CreateEnum (skip if already exists)
+DO $$ BEGIN
+    CREATE TYPE "PlanStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'TRIALING', 'PAST_DUE', 'CANCELED', 'UNPAID');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
--- CreateEnum
-CREATE TYPE "PlanTier" AS ENUM ('FREE', 'BASIC', 'PROFESSIONAL', 'ENTERPRISE');
+-- CreateEnum (skip if already exists)
+DO $$ BEGIN
+    CREATE TYPE "PlanTier" AS ENUM ('FREE', 'BASIC', 'PROFESSIONAL', 'ENTERPRISE');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
 -- CreateTable
 CREATE TABLE "admin_users" (

@@ -9,7 +9,13 @@
       "Bash(xargs:*)",
       "Bash(git commit:*)",
       "Bash(npm run build:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(lsof:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(node debug-db.js:*)",
+      "Bash(npx prisma db execute:*)",
+      "Bash(npx prisma:*)"
     ]
   }
 }
