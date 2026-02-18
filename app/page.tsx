@@ -149,11 +149,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-orange-500/50">
           {/* Logo */}
-          <div className="flex justify-center mb-8">
+          <div className="flex justify-center mb-4">
             <img
               src="/logo.png"
               alt="PreciseGovCon Logo"
-              className="h-16 w-auto object-contain rounded"
+              className="h-12 w-auto object-contain rounded"
             />
           </div>
 
