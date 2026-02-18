@@ -58,8 +58,11 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers();
-    fetchStats();
   }, [page, search, statusFilter, tierFilter]);
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -107,6 +110,7 @@ export default function UsersPage() {
       if (res.ok) {
         toast.success('User deleted successfully');
         fetchUsers();
+        fetchStats();
       } else {
         toast.error('Failed to delete user');
       }
@@ -130,6 +134,7 @@ export default function UsersPage() {
       if (res.ok) {
         toast.success(`User ${isSuspended ? 'unsuspended' : 'suspended'} successfully`);
         fetchUsers();
+        fetchStats();
       } else {
         toast.error('Failed to update user');
       }
