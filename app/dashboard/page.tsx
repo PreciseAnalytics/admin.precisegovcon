@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Users, CreditCard, TrendingUp, Activity, DollarSign, UserCheck } from 'lucide-react';
 import AddUserModal from '@/components/AddUserModal';
 import { formatCurrency } from '@/lib/utils';
@@ -15,6 +16,7 @@ interface Stats {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -108,10 +110,33 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         {statCards.map((stat) => {
           const Icon = stat.icon;
+
+          // Determine navigation based on card type
+          const getNavigation = (name: string) => {
+            switch(name) {
+              case 'Total Users':
+              case 'New This Month':
+                return '/dashboard/users';
+              case 'Active Subscriptions':
+              case 'Trial Users':
+                return '/dashboard/subscriptions';
+              case 'Total Revenue':
+                return '/dashboard/analytics';
+              case 'Active Today':
+                return '/dashboard/analytics';
+              default:
+                return '#';
+            }
+          };
+
+          const href = getNavigation(stat.name);
+
           return (
-            <div
+            <button
               key={stat.name}
-              className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-lg transition-shadow"
+              onClick={() => href !== '#' && router.push(href)}
+              className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-xl hover:border-orange-500 transition-all cursor-pointer transform hover:-translate-y-1 text-left"
+              title={`View ${stat.name.toLowerCase()}`}
             >
               <div className="flex items-center justify-between mb-4">
                 <div className={`w-12 h-12 ${stat.color} rounded-lg flex items-center justify-center`}>
@@ -121,7 +146,8 @@ export default function DashboardPage() {
               <h3 className="text-sm font-medium text-slate-600 mb-1">{stat.name}</h3>
               <p className="text-3xl font-bold text-slate-900 mb-2">{stat.value}</p>
               <p className="text-sm text-slate-500">{stat.trend}</p>
-            </div>
+              <p className="text-xs text-orange-500 font-semibold mt-3">Click to view →</p>
+            </button>
           );
         })}
       </div>
