@@ -105,7 +105,7 @@ export default function DashboardLayout({
           <div className="flex items-center justify-between h-16 px-6 border-b border-slate-200">
             <div className="flex items-center space-x-3">
               <img
-                src="/precise-govcon-logo.jpg"
+                src="/logo.png"
                 alt="PreciseGovCon Logo"
                 className="h-8 w-auto object-contain"
               />
@@ -184,7 +184,7 @@ export default function DashboardLayout({
             </button>
             <div className="flex items-center space-x-2">
               <img
-                src="/precise-govcon-logo.jpg"
+                src="/logo.png"
                 alt="PreciseGovCon Logo"
                 className="h-6 w-auto object-contain"
               />

@@ -142,7 +142,7 @@ export default function LoginPage() {
           {/* Logo */}
           <div className="flex justify-center mb-8">
             <img
-              src="/precise-govcon-logo.jpg"
+              src="/logo.png"
               alt="PreciseGovCon Logo"
               className="h-16 w-auto object-contain rounded"
             />
