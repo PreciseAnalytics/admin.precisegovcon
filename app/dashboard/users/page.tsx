@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { formatDate, getStatusColor, getTierColor } from '@/lib/utils';
 import AddUserModal from '@/components/AddUserModal';
+import StatDrillDownModal from '@/components/StatDrillDownModal';
 
 interface User {
   id: string;
@@ -65,6 +66,9 @@ export default function UsersPage() {
   const [stats, setStats] = useState<Stats>({ totalUsers: 0, activeUsers: 0, suspendedUsers: 0, paidSubscribers: 0 });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openDrillDown, setOpenDrillDown] = useState<string | null>(null);
+  const [tierDistribution, setTierDistribution] = useState<Record<string, number>>({});
+  const [statusDistribution, setStatusDistribution] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchUsers();
@@ -108,6 +112,67 @@ export default function UsersPage() {
     } catch (error) {
       console.error('Failed to fetch stats:', error);
     }
+  };
+
+  const calculateDistributions = (userList: User[]) => {
+    const tiers: Record<string, number> = {
+      'Enterprise': 0,
+      'Professional': 0,
+      'Basic': 0,
+      'Free': 0,
+    };
+
+    const statuses: Record<string, number> = {
+      'Active': 0,
+      'Trialing': 0,
+      'Pending': 0,
+      'Cancelled': 0,
+    };
+
+    userList.forEach(user => {
+      const tier = user.plan_tier?.toLowerCase() || 'free';
+      if (tier === 'enterprise') tiers['Enterprise']++;
+      else if (tier === 'professional') tiers['Professional']++;
+      else if (tier === 'basic') tiers['Basic']++;
+      else tiers['Free']++;
+
+      const status = user.plan_status?.toLowerCase() || 'pending';
+      if (status === 'active') statuses['Active']++;
+      else if (status === 'trial' || status === 'trialing') statuses['Trialing']++;
+      else if (status === 'pending') statuses['Pending']++;
+      else if (status === 'cancelled') statuses['Cancelled']++;
+    });
+
+    setTierDistribution(tiers);
+    setStatusDistribution(statuses);
+  };
+
+  const handleStatCardClick = (cardType: string) => {
+    if (!users.length) {
+      calculateDistributions([]);
+    } else {
+      calculateDistributions(users);
+    }
+    setOpenDrillDown(cardType);
+  };
+
+  const handleDrillDownFilter = (filterValue: string, filterType: string) => {
+    if (filterType === 'tier') {
+      setTierFilter(filterValue === 'Free' ? '' : filterValue.toUpperCase());
+    } else if (filterType === 'status') {
+      const statusMap: Record<string, string> = {
+        'Active': 'active',
+        'Trialing': 'trialing',
+        'Pending': 'pending',
+        'Cancelled': 'cancelled',
+      };
+      setStatusFilter(statusMap[filterValue] || '');
+    } else if (filterType === 'suspended') {
+      // For suspended users, we don't have a direct filter, but we could add one
+      toast.info('Filter by suspended users - coming soon');
+    }
+    setPage(1);
+    setOpenDrillDown(null);
   };
 
   const handleDeleteUser = async (userId: string, userName: string) => {
@@ -292,7 +357,11 @@ export default function UsersPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+        {/* Total Users Card */}
+        <button
+          onClick={() => handleStatCardClick('totalUsers')}
+          className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-blue-300 transition cursor-pointer hover:scale-105 transform duration-200"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-slate-500 uppercase">Total Users</p>
@@ -302,9 +371,14 @@ export default function UsersPage() {
               <Users className="w-5 h-5 text-blue-600" />
             </div>
           </div>
-        </div>
+          <p className="text-xs text-slate-400 mt-3">Click to see tier breakdown</p>
+        </button>
 
-        <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+        {/* Active Users Card */}
+        <button
+          onClick={() => handleStatCardClick('activeUsers')}
+          className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-green-300 transition cursor-pointer hover:scale-105 transform duration-200"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-slate-500 uppercase">Active Users</p>
@@ -314,9 +388,14 @@ export default function UsersPage() {
               <TrendingUp className="w-5 h-5 text-green-600" />
             </div>
           </div>
-        </div>
+          <p className="text-xs text-slate-400 mt-3">Click to see status breakdown</p>
+        </button>
 
-        <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+        {/* Suspended Users Card */}
+        <button
+          onClick={() => handleStatCardClick('suspendedUsers')}
+          className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-red-300 transition cursor-pointer hover:scale-105 transform duration-200"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-slate-500 uppercase">Suspended</p>
@@ -326,9 +405,14 @@ export default function UsersPage() {
               <Ban className="w-5 h-5 text-red-600" />
             </div>
           </div>
-        </div>
+          <p className="text-xs text-slate-400 mt-3">Click for details</p>
+        </button>
 
-        <div className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition">
+        {/* Paid Subscribers Card */}
+        <button
+          onClick={() => handleStatCardClick('paidSubscribers')}
+          className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:border-purple-300 transition cursor-pointer hover:scale-105 transform duration-200"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-slate-500 uppercase">Paid</p>
@@ -338,8 +422,108 @@ export default function UsersPage() {
               <CreditCard className="w-5 h-5 text-purple-600" />
             </div>
           </div>
-        </div>
+          <p className="text-xs text-slate-400 mt-3">Click for revenue insights</p>
+        </button>
       </div>
+
+      {/* Drill-Down Modals */}
+      <StatDrillDownModal
+        isOpen={openDrillDown === 'totalUsers'}
+        title="Users by Tier"
+        subtitle="Click any tier to filter the user list"
+        items={[
+          {
+            label: 'Enterprise',
+            value: tierDistribution['Enterprise'] || 0,
+            color: 'border-purple-300 bg-purple-50 hover:bg-purple-100',
+            icon: <Crown className="w-4 h-4 text-purple-600" />,
+          },
+          {
+            label: 'Professional',
+            value: tierDistribution['Professional'] || 0,
+            color: 'border-blue-300 bg-blue-50 hover:bg-blue-100',
+            icon: <Briefcase className="w-4 h-4 text-blue-600" />,
+          },
+          {
+            label: 'Basic',
+            value: tierDistribution['Basic'] || 0,
+            color: 'border-green-300 bg-green-50 hover:bg-green-100',
+            icon: <Layers className="w-4 h-4 text-green-600" />,
+          },
+          {
+            label: 'Free',
+            value: tierDistribution['Free'] || 0,
+            color: 'border-slate-300 bg-slate-50 hover:bg-slate-100',
+            icon: <Users className="w-4 h-4 text-slate-600" />,
+          },
+        ]}
+        onFilterClick={(tier) => handleDrillDownFilter(tier, 'tier')}
+        onClose={() => setOpenDrillDown(null)}
+      />
+
+      <StatDrillDownModal
+        isOpen={openDrillDown === 'activeUsers'}
+        title="Users by Status"
+        subtitle="Click any status to filter the user list"
+        items={[
+          {
+            label: 'Active',
+            value: statusDistribution['Active'] || 0,
+            color: 'border-green-300 bg-green-50 hover:bg-green-100',
+            icon: <Zap className="w-4 h-4 text-green-600" />,
+          },
+          {
+            label: 'Trialing',
+            value: statusDistribution['Trialing'] || 0,
+            color: 'border-orange-300 bg-orange-50 hover:bg-orange-100',
+            icon: <Clock className="w-4 h-4 text-orange-600" />,
+          },
+          {
+            label: 'Pending',
+            value: statusDistribution['Pending'] || 0,
+            color: 'border-yellow-300 bg-yellow-50 hover:bg-yellow-100',
+            icon: <AlertCircle className="w-4 h-4 text-yellow-600" />,
+          },
+          {
+            label: 'Cancelled',
+            value: statusDistribution['Cancelled'] || 0,
+            color: 'border-red-300 bg-red-50 hover:bg-red-100',
+            icon: <XCircle className="w-4 h-4 text-red-600" />,
+          },
+        ]}
+        onFilterClick={(status) => handleDrillDownFilter(status, 'status')}
+        onClose={() => setOpenDrillDown(null)}
+      />
+
+      <StatDrillDownModal
+        isOpen={openDrillDown === 'suspendedUsers'}
+        title="Suspended Users"
+        subtitle="Manage suspended accounts"
+        items={[
+          {
+            label: 'Suspended Accounts',
+            value: stats.suspendedUsers,
+            color: 'border-red-300 bg-red-50 hover:bg-red-100',
+            icon: <Ban className="w-4 h-4 text-red-600" />,
+          },
+        ]}
+        onClose={() => setOpenDrillDown(null)}
+      />
+
+      <StatDrillDownModal
+        isOpen={openDrillDown === 'paidSubscribers'}
+        title="Paid Subscribers"
+        subtitle="Active subscription metrics"
+        items={[
+          {
+            label: 'Paid Subscriptions',
+            value: stats.paidSubscribers,
+            color: 'border-purple-300 bg-purple-50 hover:bg-purple-100',
+            icon: <CreditCard className="w-4 h-4 text-purple-600" />,
+          },
+        ]}
+        onClose={() => setOpenDrillDown(null)}
+      />
 
       {/* Controls */}
       <div className="bg-white rounded-lg border border-slate-200 p-4 mb-8">

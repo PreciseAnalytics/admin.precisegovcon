@@ -6,14 +6,14 @@ const prisma = new PrismaClient();
 
 async function createAdmin() {
   const email = 'admin@preciseanalytics.ai';
-  const password = 'Admin123!';
+  const password = 'AdminPass123!';
   const name = 'System Administrator';
   const role = 'SUPER_ADMIN';
 
   try {
     console.log('Creating admin user...');
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const admin = await prisma.adminUser.upsert({
       where: { email },

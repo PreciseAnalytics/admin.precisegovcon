@@ -4,33 +4,32 @@ import DateTimeClock from '@/components/DateTimeClock';
 import QuoteOfDay from '@/components/QuoteOfDay';
 import { ExternalLink, HelpCircle, Mail, Globe } from 'lucide-react';
 
-export default function LoginSidebar() {
-  const links = [
-    {
-      icon: Globe,
-      label: 'Main Website',
-      href: 'https://precisegovcon.com',
-      description: 'Visit our main site'
-    },
-    {
-      icon: Mail,
-      label: 'Contact Support',
-      href: 'mailto:support@precisegovcon.com',
-      description: 'Email us for help'
-    },
-    {
-      icon: HelpCircle,
-      label: 'Help & Documentation',
-      href: '/help',
-      description: 'View help articles'
-    }
-  ];
+const LINKS = [
+  {
+    icon: Globe,
+    label: 'Main Website',
+    href: 'https://precisegovcon.com',
+    description: 'Visit our main site',
+  },
+  {
+    icon: Mail,
+    label: 'Contact Support',
+    href: 'mailto:support@precisegovcon.com',
+    description: 'Email us for help',
+  },
+  {
+    icon: HelpCircle,
+    label: 'Help & Documentation',
+    href: '/help',
+    description: 'View help articles',
+  },
+];
 
+export default function LoginSidebar() {
   return (
     <div className="flex flex-col justify-between h-full py-8 px-6">
-      {/* Top section - Welcome and Date/Time */}
+      {/* Top — Welcome & Date/Time */}
       <div className="space-y-6">
-        {/* Welcome Message */}
         <div>
           <h2 className="text-2xl font-bold bg-gradient-to-r from-orange-600 to-orange-400 bg-clip-text text-transparent mb-2">
             Welcome Back!
@@ -40,7 +39,6 @@ export default function LoginSidebar() {
           </p>
         </div>
 
-        {/* Date/Time Clock */}
         <div>
           <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
             Current Time
@@ -48,7 +46,6 @@ export default function LoginSidebar() {
           <DateTimeClock />
         </div>
 
-        {/* Quote of the Day */}
         <div>
           <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
             Daily Inspiration
@@ -57,13 +54,13 @@ export default function LoginSidebar() {
         </div>
       </div>
 
-      {/* Bottom section - Helpful Links */}
+      {/* Bottom — Links */}
       <div className="space-y-3">
         <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
           Helpful Links
         </h3>
         <div className="space-y-2">
-          {links.map((link) => {
+          {LINKS.map((link) => {
             const Icon = link.icon;
             return (
               <a
@@ -82,7 +79,7 @@ export default function LoginSidebar() {
                     {link.description}
                   </p>
                 </div>
-                <ExternalLink className="w-3 h-3 text-slate-400 dark:text-slate-500 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <ExternalLink className="w-3 h-3 text-slate-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
               </a>
             );
           })}
@@ -92,7 +89,7 @@ export default function LoginSidebar() {
       {/* Footer */}
       <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
         <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
-          © 2025 Precise Govcon<br/>
+          &copy; 2025 Precise Govcon<br />
           <span className="text-slate-400 dark:text-slate-500">Government Contracting Platform</span>
         </p>
       </div>
