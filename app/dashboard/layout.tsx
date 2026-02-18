@@ -13,7 +13,6 @@ import {
   LogOut,
   Menu,
   X,
-  Shield,
   BarChart3,
   Mail,
 } from 'lucide-react';
@@ -105,9 +104,11 @@ export default function DashboardLayout({
           {/* Logo */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-slate-200">
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
+              <img
+                src="/precise-govcon-logo.jpg"
+                alt="PreciseGovCon Logo"
+                className="h-8 w-auto object-contain"
+              />
               <span className="font-semibold text-slate-900">Admin Portal</span>
             </div>
             <button
@@ -182,7 +183,11 @@ export default function DashboardLayout({
               <Menu className="w-6 h-6" />
             </button>
             <div className="flex items-center space-x-2">
-              <Shield className="w-6 h-6 text-blue-600" />
+              <img
+                src="/precise-govcon-logo.jpg"
+                alt="PreciseGovCon Logo"
+                className="h-6 w-auto object-contain"
+              />
               <span className="font-semibold text-slate-900">Admin</span>
             </div>
             <div className="w-6" /> {/* Spacer for centering */}

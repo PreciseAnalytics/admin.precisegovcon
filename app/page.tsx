@@ -141,9 +141,11 @@ export default function LoginPage() {
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-orange-500/50">
           {/* Logo */}
           <div className="flex justify-center mb-8">
-            <div className="w-16 h-16 bg-orange-600 rounded-full flex items-center justify-center">
-              <span className="text-white text-2xl font-bold">PG</span>
-            </div>
+            <img
+              src="/precise-govcon-logo.jpg"
+              alt="PreciseGovCon Logo"
+              className="h-16 w-auto object-contain rounded"
+            />
           </div>
 
           {/* Title */}
