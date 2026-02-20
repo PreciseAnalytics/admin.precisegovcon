@@ -90,13 +90,22 @@ export default function UsersPage() {
       });
 
       const res = await fetch(`/api/users?${params}`);
+      if (res.status === 401) {
+        router.push('/');
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.details || err.error || 'Failed to fetch users');
+        return;
+      }
       const data = await res.json();
-
       setUsers(data.users || []);
       setTotalPages(data.pagination?.totalPages || 1);
       setTotal(data.pagination?.total || 0);
     } catch (error) {
-      toast.error('Failed to fetch users');
+      console.error('fetchUsers error:', error);
+      toast.error('Network error — could not reach the server');
     } finally {
       setLoading(false);
     }

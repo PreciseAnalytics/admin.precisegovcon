@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { syncUserWithStripe, getStripeSubscriptionDetails } from '@/lib/stripe-sync';
+import { logSubscriptionUpdate } from '@/lib/audit';
 
 export async function GET(
   request: NextRequest,
@@ -63,31 +64,41 @@ export async function PATCH(
 
     if (action === 'sync_stripe') {
       const result = await syncUserWithStripe(params.id);
-
       if (!result.success) {
-        return NextResponse.json(
-          { error: result.error || 'Stripe sync failed' },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: result.error || 'Stripe sync failed' }, { status: 500 });
       }
-
       const user = await prisma.user.findUnique({
         where: { id: params.id },
-        select: {
-          id: true,
-          email: true,
-          plan_tier: true,
-          plan_status: true,
-          stripe_customer_id: true,
-          stripe_subscription_id: true,
-        },
+        select: { id: true, email: true, plan_tier: true, plan_status: true, stripe_customer_id: true, stripe_subscription_id: true },
+      });
+      return NextResponse.json({ success: true, changed: result.changed, subscription: user });
+    }
+
+    if (action === 'update_subscription') {
+      const { notes, internal_status, plan_tier, plan_status } = body;
+      const session = await requireSession();
+
+      const before = await prisma.user.findUnique({
+        where: { id: params.id },
+        select: { id: true, plan_tier: true, plan_status: true },
+      });
+      if (!before) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+      const updateData: any = {};
+      if (plan_tier !== undefined) updateData.plan_tier = plan_tier;
+      if (plan_status !== undefined) updateData.plan_status = plan_status;
+      // notes/internal_status stored as JSON in a meta field if you add one later
+      // For now log them in the audit trail
+
+      const updated = await prisma.user.update({
+        where: { id: params.id },
+        data: updateData,
+        select: { id: true, email: true, plan_tier: true, plan_status: true, stripe_customer_id: true, stripe_subscription_id: true },
       });
 
-      return NextResponse.json({
-        success: true,
-        changed: result.changed,
-        subscription: user,
-      });
+      await logSubscriptionUpdate(session.id, params.id, before, { ...updated, notes, internal_status });
+
+      return NextResponse.json({ success: true, subscription: updated });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
