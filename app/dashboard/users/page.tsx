@@ -14,7 +14,8 @@ import {
   CreditCard,
   Trash2,
   Ban,
-  MoreVertical,
+  Eye,
+  CheckCircle,
   ChevronDown,
   TrendingUp,
   Grid3x3,
@@ -65,7 +66,6 @@ export default function UsersPage() {
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [stats, setStats] = useState<Stats>({ totalUsers: 0, activeUsers: 0, suspendedUsers: 0, paidSubscribers: 0 });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openDrillDown, setOpenDrillDown] = useState<string | null>(null);
   const [tierDistribution, setTierDistribution] = useState<Record<string, number>>({});
   const [statusDistribution, setStatusDistribution] = useState<Record<string, number>>({});
@@ -168,7 +168,6 @@ export default function UsersPage() {
       };
       setStatusFilter(statusMap[filterValue] || '');
     } else if (filterType === 'suspended') {
-      // For suspended users, we don't have a direct filter, but we could add one
       toast.info('Filter by suspended users - coming soon');
     }
     setPage(1);
@@ -327,6 +326,48 @@ export default function UsersPage() {
 
   const groupedUsers = groupBy === 'tier' ? groupUsersByTier() : groupBy === 'status' ? groupUsersByStatus() : [];
 
+  // Action buttons component inline
+  const UserActionButtons = ({ user }: { user: User }) => (
+    <div className="flex items-center justify-end gap-2">
+      {/* View Details Button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          router.push(`/dashboard/users/${user.id}`);
+        }}
+        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors shadow-sm"
+      >
+        View Details
+      </button>
+
+      {/* Suspend/Unsuspend Button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleSuspendUser(user.id, user.name || 'User', user.is_suspended);
+        }}
+        className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors shadow-sm ${
+          user.is_suspended
+            ? 'bg-green-600 hover:bg-green-700 text-white'
+            : 'bg-orange-600 hover:bg-orange-700 text-white'
+        }`}
+      >
+        {user.is_suspended ? 'Unsuspend' : 'Suspend'}
+      </button>
+
+      {/* Delete Button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDeleteUser(user.id, user.name || 'User');
+        }}
+        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors shadow-sm"
+      >
+        Delete
+      </button>
+    </div>
+  );
+
   if (loading && users.length === 0) {
     return (
       <div className="p-8">
@@ -426,365 +467,118 @@ export default function UsersPage() {
         </button>
       </div>
 
-      {/* Drill-Down Modals */}
-      <StatDrillDownModal
-        isOpen={openDrillDown === 'totalUsers'}
-        title="Users by Tier"
-        subtitle="Click any tier to filter the user list"
-        items={[
-          {
-            label: 'Enterprise',
-            value: tierDistribution['Enterprise'] || 0,
-            color: 'border-purple-300 bg-purple-50 hover:bg-purple-100',
-            icon: <Crown className="w-4 h-4 text-purple-600" />,
-          },
-          {
-            label: 'Professional',
-            value: tierDistribution['Professional'] || 0,
-            color: 'border-blue-300 bg-blue-50 hover:bg-blue-100',
-            icon: <Briefcase className="w-4 h-4 text-blue-600" />,
-          },
-          {
-            label: 'Basic',
-            value: tierDistribution['Basic'] || 0,
-            color: 'border-green-300 bg-green-50 hover:bg-green-100',
-            icon: <Layers className="w-4 h-4 text-green-600" />,
-          },
-          {
-            label: 'Free',
-            value: tierDistribution['Free'] || 0,
-            color: 'border-slate-300 bg-slate-50 hover:bg-slate-100',
-            icon: <Users className="w-4 h-4 text-slate-600" />,
-          },
-        ]}
-        onFilterClick={(tier) => handleDrillDownFilter(tier, 'tier')}
-        onClose={() => setOpenDrillDown(null)}
-      />
-
-      <StatDrillDownModal
-        isOpen={openDrillDown === 'activeUsers'}
-        title="Users by Status"
-        subtitle="Click any status to filter the user list"
-        items={[
-          {
-            label: 'Active',
-            value: statusDistribution['Active'] || 0,
-            color: 'border-green-300 bg-green-50 hover:bg-green-100',
-            icon: <Zap className="w-4 h-4 text-green-600" />,
-          },
-          {
-            label: 'Trialing',
-            value: statusDistribution['Trialing'] || 0,
-            color: 'border-orange-300 bg-orange-50 hover:bg-orange-100',
-            icon: <Clock className="w-4 h-4 text-orange-600" />,
-          },
-          {
-            label: 'Pending',
-            value: statusDistribution['Pending'] || 0,
-            color: 'border-yellow-300 bg-yellow-50 hover:bg-yellow-100',
-            icon: <AlertCircle className="w-4 h-4 text-yellow-600" />,
-          },
-          {
-            label: 'Cancelled',
-            value: statusDistribution['Cancelled'] || 0,
-            color: 'border-red-300 bg-red-50 hover:bg-red-100',
-            icon: <XCircle className="w-4 h-4 text-red-600" />,
-          },
-        ]}
-        onFilterClick={(status) => handleDrillDownFilter(status, 'status')}
-        onClose={() => setOpenDrillDown(null)}
-      />
-
-      <StatDrillDownModal
-        isOpen={openDrillDown === 'suspendedUsers'}
-        title="Suspended Users"
-        subtitle="Manage suspended accounts"
-        items={[
-          {
-            label: 'Suspended Accounts',
-            value: stats.suspendedUsers,
-            color: 'border-red-300 bg-red-50 hover:bg-red-100',
-            icon: <Ban className="w-4 h-4 text-red-600" />,
-          },
-        ]}
-        onClose={() => setOpenDrillDown(null)}
-      />
-
-      <StatDrillDownModal
-        isOpen={openDrillDown === 'paidSubscribers'}
-        title="Paid Subscribers"
-        subtitle="Active subscription metrics"
-        items={[
-          {
-            label: 'Paid Subscriptions',
-            value: stats.paidSubscribers,
-            color: 'border-purple-300 bg-purple-50 hover:bg-purple-100',
-            icon: <CreditCard className="w-4 h-4 text-purple-600" />,
-          },
-        ]}
-        onClose={() => setOpenDrillDown(null)}
-      />
-
-      {/* Controls */}
-      <div className="bg-white rounded-lg border border-slate-200 p-4 mb-8">
-        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
-          <div className="flex-1 flex gap-2">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by email, name..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-
-            <select
-              value={statusFilter}
+      {/* Filters & Controls */}
+      <div className="bg-white rounded-lg border border-slate-200 p-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by email, name..."
+              value={search}
               onChange={(e) => {
-                setStatusFilter(e.target.value);
+                setSearch(e.target.value);
                 setPage(1);
               }}
-              className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
-            >
-              <option value="">All Status</option>
-              <option value="trialing">Trialing</option>
-              <option value="pending">Pending</option>
-              <option value="active">Active</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+          </div>
 
-            <select
-              value={tierFilter}
-              onChange={(e) => {
-                setTierFilter(e.target.value);
-                setPage(1);
-              }}
-              className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
-            >
-              <option value="">All Tiers</option>
-              <option value="BASIC">Basic</option>
-              <option value="PROFESSIONAL">Professional</option>
-              <option value="ENTERPRISE">Enterprise</option>
-            </select>
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+          >
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="trialing">Trialing</option>
+            <option value="pending">Pending</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
 
+          {/* Tier Filter */}
+          <select
+            value={tierFilter}
+            onChange={(e) => {
+              setTierFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+          >
+            <option value="">All Tiers</option>
+            <option value="ENTERPRISE">Enterprise</option>
+            <option value="PROFESSIONAL">Professional</option>
+            <option value="BASIC">Basic</option>
+            <option value="">Free</option>
+          </select>
+
+          {/* Group By */}
+          <div className="flex gap-2">
             <select
               value={groupBy}
-              onChange={(e) => {
-                setGroupBy(e.target.value as 'none' | 'tier' | 'status');
-                setPage(1);
-              }}
-              className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm bg-blue-50"
+              onChange={(e) => setGroupBy(e.target.value as 'none' | 'tier' | 'status')}
+              className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="none">Group By: None</option>
               <option value="tier">Group By: Tier</option>
               <option value="status">Group By: Status</option>
             </select>
-          </div>
-
-          <div className="flex gap-2">
+            
+            {/* Add User Button */}
             <button
               onClick={() => setShowAddUserModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition"
+              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition flex items-center gap-2 whitespace-nowrap"
             >
               <UserPlus className="w-4 h-4" />
               Add User
             </button>
-
-            {/* View Mode Toggle */}
-            <div className="flex gap-1 p-1 bg-slate-100 rounded-lg">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded transition ${
-                  viewMode === 'grid'
-                    ? 'bg-white text-orange-600 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-                title="Grid view"
-              >
-                <Grid3x3 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded transition ${
-                  viewMode === 'list'
-                    ? 'bg-white text-orange-600 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-                title="List view"
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Users View */}
-      {users.length === 0 ? (
-        <div className="text-center py-16">
-          <Users className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-          <p className="text-slate-500 text-lg">No users found</p>
-          <p className="text-slate-400 text-sm mt-1">Try adjusting your filters or add a new user</p>
+      {/* View Mode Toggle */}
+      <div className="flex justify-end mb-4">
+        <div className="inline-flex bg-slate-100 rounded-lg p-1">
+          <button
+            onClick={() => setViewMode('grid')}
+            className={`px-4 py-2 rounded-md transition ${
+              viewMode === 'grid'
+                ? 'bg-white text-orange-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Grid3x3 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`px-4 py-2 rounded-md transition ${
+              viewMode === 'list'
+                ? 'bg-white text-orange-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <List className="w-4 h-4" />
+          </button>
         </div>
-      ) : groupBy !== 'none' ? (
-        <div className="space-y-8 mb-8">
+      </div>
+
+      {/* Users Display */}
+      {groupBy !== 'none' ? (
+        <div className="space-y-6 mb-8">
           {groupedUsers.map(([groupName, groupUsers]) => (
-            <div key={groupName}>
-              <h2 className="text-lg font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">
-                {groupName} ({groupUsers.length})
-              </h2>
-              <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : ''}>
-                {groupUsers.map((user) => (
-            <div
-              key={user.id}
-              className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg hover:border-orange-300 transition group cursor-pointer"
-              onClick={() => router.push(`/dashboard/users/${user.id}`)}
-            >
-              {/* Card Header */}
-              <div className={`${getTierHeaderColor(user.plan_tier)} px-6 py-4 border-b border-slate-200 flex items-start justify-between`}>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-slate-900 truncate hover:text-orange-600 transition cursor-pointer group-hover:text-orange-600">
-                    {user.name || 'Unnamed User'}
-                  </h3>
-                  <p className="text-sm text-slate-600 truncate">{user.email}</p>
-                </div>
-                <div className="relative ml-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOpenMenuId(openMenuId === user.id ? null : user.id);
-                    }}
-                    className="p-2 hover:bg-white rounded-lg transition text-slate-400 hover:text-slate-600"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
-
-                  {openMenuId === user.id && (
-                    <div className="absolute right-0 top-full mt-1 bg-white rounded-lg border border-slate-200 shadow-lg z-10 min-w-48">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/dashboard/users/${user.id}`);
-                          setOpenMenuId(null);
-                        }}
-                        className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 font-medium border-b border-slate-100 text-sm"
-                      >
-                        View Details
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSuspendUser(user.id, user.name || 'User', user.is_suspended);
-                          setOpenMenuId(null);
-                        }}
-                        className="w-full text-left px-4 py-2 hover:bg-orange-50 text-orange-600 text-sm"
-                      >
-                        <Ban className="w-3.5 h-3.5 inline mr-2" />
-                        {user.is_suspended ? 'Unsuspend' : 'Suspend'}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteUser(user.id, user.name || 'User');
-                          setOpenMenuId(null);
-                        }}
-                        className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 text-sm"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 inline mr-2" />
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </div>
+            <div key={groupName} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+              <div className={`px-6 py-3 ${getTierHeaderColor(groupName)}`}>
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  {groupBy === 'tier' ? getTierIcon(groupName) : getStatusIcon(groupName)}
+                  {groupName} ({groupUsers.length})
+                </h3>
               </div>
-
-              {/* Card Body */}
-              <div className="px-6 py-4 space-y-3">
-                {user.company && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Building className="w-4 h-4 text-slate-400" />
-                    <span className="text-slate-700">{user.company}</span>
-                  </div>
-                )}
-
-                {user.last_login_at && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Calendar className="w-4 h-4 text-slate-400" />
-                    <span className="text-slate-600">
-                      Last login: {formatDate(user.last_login_at)}
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 text-sm">
-                  <Calendar className="w-4 h-4 text-slate-400" />
-                  <span className="text-slate-600">
-                    Joined: {formatDate(user.created_at)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Card Footer - Badges */}
-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex gap-2 flex-wrap">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setTierFilter(user.plan_tier || '');
-                    setPage(1);
-                  }}
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer flex items-center gap-1 ${getTierBadgeColor(user.plan_tier)}`}
-                  title="Filter by tier"
-                >
-                  {getTierIcon(user.plan_tier)}
-                  {user.plan_tier ? user.plan_tier.charAt(0).toUpperCase() + user.plan_tier.slice(1) : 'Free'}
-                </button>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setStatusFilter(user.plan_status || '');
-                    setPage(1);
-                  }}
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition hover:opacity-80 cursor-pointer flex items-center gap-1 ${getStatusBadgeColor(user.plan_status)}`}
-                  title="Filter by status"
-                >
-                  {getStatusIcon(user.plan_status)}
-                  {user.plan_status ? user.plan_status.charAt(0).toUpperCase() + user.plan_status.slice(1) : 'Inactive'}
-                </button>
-
-                {user.is_suspended && (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 flex items-center gap-1 w-fit">
-                    <Ban className="w-3 h-3" />
-                    Suspended
-                  </span>
-                )}
-
-                {user.is_active && !user.is_suspended && (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 flex items-center gap-1 w-fit">
-                    <Zap className="w-3 h-3" />
-                    Active
-                  </span>
-                )}
-              </div>
-            </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : viewMode === 'list' && groupBy !== 'none' ? (
-        <div className="space-y-8 mb-8">
-          {groupedUsers.map(([groupName, groupUsers]) => (
-            <div key={groupName}>
-              <h2 className="text-lg font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">
-                {groupName} ({groupUsers.length})
-              </h2>
-              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+              <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
@@ -849,54 +643,7 @@ export default function UsersPage() {
                         </td>
                         <td className="px-6 py-4 text-sm text-slate-600">{formatDate(user.created_at)}</td>
                         <td className="px-6 py-4 text-right">
-                          <div className="relative">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenMenuId(openMenuId === user.id ? null : user.id);
-                              }}
-                              className="p-2 hover:bg-slate-200 rounded-lg transition text-slate-400 hover:text-slate-600"
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-
-                            {openMenuId === user.id && (
-                              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg border border-slate-200 shadow-lg z-10 min-w-48">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    router.push(`/dashboard/users/${user.id}`);
-                                    setOpenMenuId(null);
-                                  }}
-                                  className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 font-medium border-b border-slate-100 text-sm"
-                                >
-                                  View Details
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSuspendUser(user.id, user.name || 'User', user.is_suspended);
-                                    setOpenMenuId(null);
-                                  }}
-                                  className="w-full text-left px-4 py-2 hover:bg-orange-50 text-orange-600 text-sm"
-                                >
-                                  <Ban className="w-3.5 h-3.5 inline mr-2" />
-                                  {user.is_suspended ? 'Unsuspend' : 'Suspend'}
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteUser(user.id, user.name || 'User');
-                                    setOpenMenuId(null);
-                                  }}
-                                  className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 text-sm"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5 inline mr-2" />
-                                  Delete
-                                </button>
-                              </div>
-                            )}
-                          </div>
+                          <UserActionButtons user={user} />
                         </td>
                       </tr>
                     ))}
@@ -972,54 +719,7 @@ export default function UsersPage() {
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">{formatDate(user.created_at)}</td>
                   <td className="px-6 py-4 text-right">
-                    <div className="relative">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenMenuId(openMenuId === user.id ? null : user.id);
-                        }}
-                        className="p-2 hover:bg-slate-200 rounded-lg transition text-slate-400 hover:text-slate-600"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-
-                      {openMenuId === user.id && (
-                        <div className="absolute right-0 top-full mt-1 bg-white rounded-lg border border-slate-200 shadow-lg z-10 min-w-48">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(`/dashboard/users/${user.id}`);
-                              setOpenMenuId(null);
-                            }}
-                            className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 font-medium border-b border-slate-100 text-sm"
-                          >
-                            View Details
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSuspendUser(user.id, user.name || 'User', user.is_suspended);
-                              setOpenMenuId(null);
-                            }}
-                            className="w-full text-left px-4 py-2 hover:bg-orange-50 text-orange-600 text-sm"
-                          >
-                            <Ban className="w-3.5 h-3.5 inline mr-2" />
-                            {user.is_suspended ? 'Unsuspend' : 'Suspend'}
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteUser(user.id, user.name || 'User');
-                              setOpenMenuId(null);
-                            }}
-                            className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 text-sm"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 inline mr-2" />
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    <UserActionButtons user={user} />
                   </td>
                 </tr>
               ))}
@@ -1078,6 +778,82 @@ export default function UsersPage() {
 
       {/* Add User Modal */}
       <AddUserModal isOpen={showAddUserModal} onClose={() => setShowAddUserModal(false)} onSuccess={() => fetchUsers()} />
+      
+      {/* Stat Drill Down Modal */}
+      {(() => {
+        const getModalProps = () => {
+          if (!openDrillDown) return null;
+          switch (openDrillDown) {
+            case 'totalUsers':
+              return {
+                title: 'Users by Plan Tier',
+                subtitle: `${stats.totalUsers} total users`,
+                items: Object.entries(tierDistribution).map(([label, value]) => ({
+                  label, value,
+                  color:
+                    label === 'Enterprise' ? 'border-purple-200 bg-purple-50 hover:bg-purple-100' :
+                    label === 'Professional' ? 'border-blue-200 bg-blue-50 hover:bg-blue-100' :
+                    label === 'Basic' ? 'border-green-200 bg-green-50 hover:bg-green-100' :
+                    'border-slate-200 bg-slate-50 hover:bg-slate-100',
+                })),
+                onFilterClick: (label: string) => handleDrillDownFilter(label, 'tier'),
+              };
+            case 'activeUsers':
+              return {
+                title: 'Users by Status',
+                subtitle: `${stats.activeUsers} active users`,
+                items: Object.entries(statusDistribution).map(([label, value]) => ({
+                  label, value,
+                  color:
+                    label === 'Active' ? 'border-green-200 bg-green-50 hover:bg-green-100' :
+                    label === 'Trialing' ? 'border-orange-200 bg-orange-50 hover:bg-orange-100' :
+                    label === 'Pending' ? 'border-yellow-200 bg-yellow-50 hover:bg-yellow-100' :
+                    'border-red-200 bg-red-50 hover:bg-red-100',
+                })),
+                onFilterClick: (label: string) => handleDrillDownFilter(label, 'status'),
+              };
+            case 'suspendedUsers':
+              return {
+                title: 'Suspended Users',
+                subtitle: `${stats.suspendedUsers} suspended`,
+                items: [
+                  { label: 'Suspended', value: stats.suspendedUsers, color: 'border-red-200 bg-red-50 hover:bg-red-100' },
+                  { label: 'Active', value: stats.activeUsers, color: 'border-green-200 bg-green-50 hover:bg-green-100' },
+                ],
+                onFilterClick: (label: string) => handleDrillDownFilter(label, 'suspended'),
+              };
+            case 'paidSubscribers':
+              return {
+                title: 'Paid Subscribers',
+                subtitle: `${stats.paidSubscribers} paying users`,
+                items: Object.entries(tierDistribution)
+                  .filter(([label]) => label !== 'Free')
+                  .map(([label, value]) => ({
+                    label, value,
+                    color:
+                      label === 'Enterprise' ? 'border-purple-200 bg-purple-50 hover:bg-purple-100' :
+                      label === 'Professional' ? 'border-blue-200 bg-blue-50 hover:bg-blue-100' :
+                      'border-green-200 bg-green-50 hover:bg-green-100',
+                  })),
+                onFilterClick: (label: string) => handleDrillDownFilter(label, 'tier'),
+              };
+            default:
+              return null;
+          }
+        };
+        const modalProps = getModalProps();
+        if (!modalProps) return null;
+        return (
+          <StatDrillDownModal
+            isOpen={!!openDrillDown}
+            onClose={() => setOpenDrillDown(null)}
+            title={modalProps.title}
+            subtitle={modalProps.subtitle}
+            items={modalProps.items}
+            onFilterClick={modalProps.onFilterClick}
+          />
+        );
+      })()}
     </div>
   );
 }

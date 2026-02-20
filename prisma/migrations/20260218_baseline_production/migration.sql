@@ -1,26 +1,44 @@
 -- CreateEnum
-CREATE TYPE "AdminRole" AS ENUM ('SUPER_ADMIN', 'ADMIN', 'VIEWER');
+DO $$ BEGIN
+  CREATE TYPE "AdminRole" AS ENUM ('SUPER_ADMIN', 'ADMIN', 'VIEWER');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateEnum
-CREATE TYPE "AlertFrequency" AS ENUM ('DAILY', 'WEEKLY', 'MONTHLY', 'AS_CHANGES', 'MANUAL');
+DO $$ BEGIN
+  CREATE TYPE "AlertFrequency" AS ENUM ('DAILY', 'WEEKLY', 'MONTHLY', 'AS_CHANGES', 'MANUAL');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateEnum
-CREATE TYPE "AlertRunStatus" AS ENUM ('SUCCESS', 'ERROR', 'NO_RESULTS');
+DO $$ BEGIN
+  CREATE TYPE "AlertRunStatus" AS ENUM ('SUCCESS', 'ERROR', 'NO_RESULTS');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateEnum
-CREATE TYPE "ExportFormat" AS ENUM ('CSV', 'JSON', 'EXCEL', 'PDF');
+DO $$ BEGIN
+  CREATE TYPE "ExportFormat" AS ENUM ('CSV', 'JSON', 'EXCEL', 'PDF');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateEnum
-CREATE TYPE "ExportStatus" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'EXPIRED');
+DO $$ BEGIN
+  CREATE TYPE "ExportStatus" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'EXPIRED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateEnum
-CREATE TYPE "PlanStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'TRIALING', 'PAST_DUE', 'CANCELED', 'UNPAID');
+DO $$ BEGIN
+  CREATE TYPE "PlanStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'TRIALING', 'PAST_DUE', 'CANCELED', 'UNPAID');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateEnum
-CREATE TYPE "PlanTier" AS ENUM ('FREE', 'BASIC', 'PROFESSIONAL', 'ENTERPRISE');
+DO $$ BEGIN
+  CREATE TYPE "PlanTier" AS ENUM ('FREE', 'BASIC', 'PROFESSIONAL', 'ENTERPRISE');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateEnum
-CREATE TYPE "RunStatus" AS ENUM ('SUCCESS', 'ERROR');
+DO $$ BEGIN
+  CREATE TYPE "RunStatus" AS ENUM ('SUCCESS', 'ERROR');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 
 -- CreateTable
 CREATE TABLE "AutoLoginToken" (

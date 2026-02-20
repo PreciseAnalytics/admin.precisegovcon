@@ -163,7 +163,28 @@ function SubRow({
 }) {
   const tierKey   = getTierKey(sub.plan_tier);
   const tierTheme = TIER_THEMES[tierKey];
-  const isActive  = sub.plan_status === 'active';
+
+  const isTrial =
+    tierKey === 'trial' ||
+    !sub.plan_tier ||
+    sub.plan_tier?.toLowerCase() === 'trial' ||
+    (!sub.stripe_subscription_id && !sub.stripe_customer_id);
+
+  const normalizedStatus = sub.plan_status?.toLowerCase();
+
+  const statusLabel =
+    isTrial                          ? '◐ TRIAL'
+    : normalizedStatus === 'active'   ? '● ACTIVE'
+    : normalizedStatus === 'trialing' ? '◐ TRIALING'
+    : normalizedStatus === 'pending'  ? '⏳ PENDING'
+    : '○ INACTIVE';
+
+  const statusBg =
+    isTrial                          ? '#7c2d12'
+    : normalizedStatus === 'active'   ? '#14532d'
+    : normalizedStatus === 'trialing' ? '#1e3a8a'
+    : normalizedStatus === 'pending'  ? '#b45309'
+    : '#374151';
 
   return (
     <div
@@ -194,12 +215,11 @@ function SubRow({
             </span>
 
             {/* Status pill */}
-            <span className="px-3 py-1 rounded-full text-xs font-black"
-              style={{
-                background: isActive ? '#14532d' : '#374151',
-                color: '#fff',
-              }}>
-              {isActive ? '● ACTIVE' : '○ INACTIVE'}
+            <span
+              className="px-3 py-1 rounded-full text-xs font-black"
+              style={{ background: statusBg, color: '#fff' }}
+            >
+              {statusLabel}
             </span>
           </div>
           <p className="text-sm font-bold text-slate-600">{sub.email}</p>
@@ -216,7 +236,7 @@ function SubRow({
           </p>
         </div>
 
-        {/* Action buttons — inline, no dropdown */}
+        {/* Action buttons */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={(e) => { e.stopPropagation(); onEmail(sub); }}
@@ -253,7 +273,6 @@ export default function SubscriptionsPage() {
   const [search,        setSearch]        = useState('');
   const [activeTheme,   setActiveTheme]   = useState<TierKey>('all');
 
-  // Map theme key → API tier filter value
   const tierFilterMap: Partial<Record<TierKey, string>> = {
     trial: 'trial', basic: 'basic', professional: 'professional', enterprise: 'enterprise',
   };

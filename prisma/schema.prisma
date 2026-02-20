@@ -3,52 +3,49 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
 }
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  VIEWER
+}
+
+enum PlanStatus {
+  ACTIVE
+  INACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  UNPAID
+}
+
+enum PlanTier {
+  FREE
+  BASIC
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
 
 model AdminUser {
-  id        String     @id @default(cuid())
-  email     String     @unique
-  name      String
-  password  String
-  role      AdminRole  @default(ADMIN)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  auditLogs AuditLog[]
+  id               String    @id @default(uuid())
+  email            String    @unique
+  name             String
+  password         String
+  role             AdminRole
+  resetToken       String?   // Add this
+  resetTokenExpiry DateTime? // Add this
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  auditLogs        AuditLog[]
 
   @@map("admin_users")
-}
-
-model User {
-  id                        String    @id @default(cuid())
-  email                     String    @unique
-  name                      String?
-  firstName                 String?
-  lastName                  String?
-  company                   String?
-  phone                     String?
-  plan                      String?
-  plan_status               String?
-  plan_tier                 String?
-  stripe_customer_id        String?   @unique
-  stripe_subscription_id    String?   @unique
-  created_at                DateTime  @default(now())
-  updated_at                DateTime  @updatedAt
-  password                  String?
-  last_login_at             DateTime?
-  is_active                 Boolean?  @default(true)
-  is_suspended              Boolean?  @default(false)
-  email_verified            Boolean   @default(false)
-  email_verification_token  String?   @unique
-  email_verification_expires DateTime?
-
-  @@index([email])
-  @@index([stripe_customer_id])
-  @@index([plan_status])
-  @@index([plan_tier])
-  @@index([email_verified])
-  @@map("users")
 }
 
 model AuditLog {
@@ -73,24 +70,220 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-enum AdminRole {
-  SUPER_ADMIN
-  ADMIN
-  VIEWER
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id                         String    @id @default(cuid())
+  email                      String    @unique
+  name                       String?
+  firstName                  String?
+  lastName                   String?
+  company                    String?
+  phone                      String?
+  plan                       String?
+  plan_status                String?
+  plan_tier                  String?
+  stripe_customer_id         String?   @unique
+  stripe_subscription_id     String?   @unique
+  created_at                 DateTime  @default(now())
+  updated_at                 DateTime  @updatedAt
+  password                   String?
+  last_login_at              DateTime?
+  is_active                  Boolean?  @default(true)
+  is_suspended               Boolean?  @default(false)
+  email_verified             Boolean   @default(false)
+  email_verification_token   String?   @unique
+  email_verification_expires DateTime?
+
+  @@index([email])
+  @@index([stripe_customer_id])
+  @@index([plan_status])
+  @@index([plan_tier])
+  @@index([email_verified])
+  @@map("users")
 }
 
-enum PlanStatus {
-  ACTIVE
-  INACTIVE
-  TRIALING
-  PAST_DUE
-  CANCELED
-  UNPAID
+// ─── SAM.gov Contractors (existing table — raw SQL created) ───────────────────
+
+model Contractor {
+  id                String    @id
+  uei_number        String    @unique
+  name              String
+  email             String    @default("")
+  sam_gov_id        String?
+  cage_code         String?
+  naics_code        String?
+  state             String?
+  business_type     String?
+  registration_date DateTime? @db.Date
+  contacted         Boolean   @default(false)
+  enrolled          Boolean   @default(false)
+  contact_attempts  Int       @default(0)
+  offer_code        String?
+  last_contact      DateTime? @db.Date
+  notes             String?
+  priority          String?
+  score             Int?
+  created_at        DateTime  @default(now()) @db.Timestamptz
+  synced_at         DateTime? @db.Timestamptz
+
+  // CRM columns (added via migration SQL below)
+  pipeline_stage    String?   // new | contacted | opened | responded | demo | trial | converted | churned | unsubscribed
+  trial_start       DateTime? @db.Date
+  trial_end         DateTime? @db.Date
+  revenue           Decimal?  @db.Decimal(10, 2)
+
+  // Relations
+  email_logs        EmailLog[]
+  crm_activities    CrmActivity[]
+  crm_tasks         CrmTask[]
+
+  @@index([state])
+  @@index([naics_code])
+  @@index([contacted])
+  @@index([enrolled])
+  @@index([pipeline_stage])
+  @@map("contractors")
 }
 
-enum PlanTier {
-  FREE
-  BASIC
-  PROFESSIONAL
-  ENTERPRISE
+// ─── Email Logs (existing table) ──────────────────────────────────────────────
+
+model EmailLog {
+  id            String    @id @default(cuid())
+  contractor_id String
+  subject       String?
+  body          String?
+  offer_code    String?
+  campaign_type String?
+  status        String?
+  resend_id     String?
+  sent_at       DateTime  @default(now()) @db.Timestamptz
+
+  contractor    Contractor @relation(fields: [contractor_id], references: [id], onDelete: Cascade)
+
+  @@index([contractor_id])
+  @@index([sent_at])
+  @@index([status])
+  @@map("email_logs")
 }
+
+// ─── Sync Logs (existing table) ───────────────────────────────────────────────
+
+model SyncLog {
+  id                  String    @id @default(cuid())
+  contractors_synced  Int       @default(0)
+  new_contractors     Int       @default(0)
+  total_available     Int       @default(0)
+  date_range_from     DateTime?
+  date_range_to       DateTime?
+  status              String    @default("success")
+  error               String?
+  duration_ms         Int?
+  created_at          DateTime  @default(now()) @db.Timestamptz
+
+  @@index([created_at])
+  @@index([status])
+  @@map("sync_logs")
+}
+
+// ─── CRM — Offer Codes (new table) ───────────────────────────────────────────
+
+model OfferCode {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  description String
+  discount    String
+  type        String    @default("trial") // trial | discount | feature
+  usage_count Int       @default(0)
+  max_usage   Int?
+  expires_at  DateTime? @db.Date
+  active      Boolean   @default(true)
+  created_at  DateTime  @default(now()) @db.Timestamptz
+  updated_at  DateTime  @updatedAt @db.Timestamptz
+
+  // Relations
+  crm_activities CrmActivity[]
+
+  @@index([code])
+  @@index([active])
+  @@map("offer_codes")
+}
+
+// ─── Add this model to prisma/schema.prisma ──────────────────────────────────
+
+model EmailTemplate {
+  id           String   @id @default(cuid())
+  name         String
+  subject      String
+  body         String
+  category     String   @default("cold") // cold | followup | opportunity | onboarding
+  offer_code   String?
+  tags         String[] @default([])
+  ai_generated Boolean  @default(false)
+  usage_count  Int      @default(0)
+  active       Boolean  @default(true)
+  created_by   String?
+  created_at   DateTime @default(now()) @db.Timestamptz
+  updated_at   DateTime @updatedAt @db.Timestamptz
+
+  @@index([category])
+  @@index([active])
+  @@index([created_at])
+  @@map("email_templates")
+}
+
+
+// ─── CRM — Activity Log (new table) ──────────────────────────────────────────
+
+model CrmActivity {
+  id              String     @id @default(cuid())
+  contractor_id   String
+  offer_code_id   String?
+  type            String     // email_sent | email_opened | email_replied | call_made | call_missed | note_added | stage_changed | code_redeemed | signed_up | unsubscribed | task_completed | follow_up_scheduled
+  description     String
+  metadata        Json?
+  created_by      String?    // admin user id or "system"
+  created_at      DateTime   @default(now()) @db.Timestamptz
+
+  contractor      Contractor  @relation(fields: [contractor_id], references: [id], onDelete: Cascade)
+  offer_code      OfferCode?  @relation(fields: [offer_code_id], references: [id], onDelete: SetNull)
+
+  @@index([contractor_id])
+  @@index([type])
+  @@index([created_at])
+  @@map("crm_activities")
+}
+
+// ─── CRM — Tasks (new table) ─────────────────────────────────────────────────
+
+model CrmTask {
+  id              String    @id @default(cuid())
+  contractor_id   String
+  contractor_name String
+  title           String
+  due_date        DateTime  @db.Date
+  priority        String    @default("medium") // high | medium | low
+  status          String    @default("pending") // pending | done | overdue
+  assignee        String?
+  notes           String?
+  created_at      DateTime  @default(now()) @db.Timestamptz
+  completed_at    DateTime? @db.Timestamptz
+
+  contractor      Contractor @relation(fields: [contractor_id], references: [id], onDelete: Cascade)
+
+  @@index([contractor_id])
+  @@index([status])
+  @@index([due_date])
+  @@index([priority])
+  @@map("crm_tasks")
+}
+
+// ─── Existing tables we don't touch but need to acknowledge ──────────────────
+// accounts, sessions, verification_tokens, email_verification_tokens,
+// password_reset_tokens, auto_login_tokens, AutoLoginToken,
+// saved_searches, saved_searches_new, saved_searches_v2,
+// saved_search_runs, search_alerts, alert_subscriptions, alert_runs,
+// alert_exports, search_exports, search_runs, searches,
+// sam_cached_searches, opportunity_daily_stats, subscription_runs,
+// recipient_contacts, two_factor_backup_codes
+// These are managed by other parts of the app — left unmapped intentionally.

@@ -1,0 +1,15 @@
+
+FullName
+--------
+C:\Users\owner\Documents\precisegovcon-admin-portal\prisma\migrations
+C:\Users\owner\Documents\precisegovcon-admin-portal\prisma\schema.prisma
+C:\Users\owner\Documents\precisegovcon-admin-portal\prisma\seed.ts
+C:\Users\owner\Documents\precisegovcon-admin-portal\prisma\migrations\20260118164113_add_users_table
+C:\Users\owner\Documents\precisegovcon-admin-portal\prisma\migrations\20260118172225_add_user_password
+C:\Users\owner\Documents\precisegovcon-admin-portal\prisma\migrations\20260217_sync_stripe_status
+C:\Users\owner\Documents\precisegovcon-admin-portal\prisma\migrations\001_init_admin_tables.sql
+C:\Users\owner\Documents\precisegovcon-admin-portal\prisma\migrations\migration_lock.toml
+C:\Users\owner\Documents\precisegovcon-admin-portal\prisma\migrations\20260118164113_add_users_table\migration.sql
+C:\Users\owner\Documents\precisegovcon-admin-portal\prisma\migrations\20260118172225_add_user_password\migration.sql
+C:\Users\owner\Documents\precisegovcon-admin-portal\prisma\migrations\20260217_sync_stripe_status\migration.sql
+

@@ -1,0 +1,30 @@
+
+Name                 Length
+----                 ------
+.claude              
+.env                 1680
+.git                 
+.gitignore           377
+.next                
+add-admin-tables.sql 2329
+app                  
+components           
+debug-db.js          2468
+debug-db.ts          2455
+lib                  
+next-env.d.ts        233
+next.config.js       927
+node_modules         
+package-lock.json    252054
+package.json         1480
+postcss.config.js    82
+PR_DETAILS.md        4729
+prisma               
+public               
+repo-root-files.txt  0
+repo-tree.txt        25
+scripts              
+setup-admin.js       1327
+tailwind.config.js   2331
+tsconfig.json        702
+

@@ -1,7 +1,8 @@
-/**
- * Email Service for PreciseGovCon Admin Portal
- * Handles sending transactional emails to users and admins
- */
+// lib/email.ts
+
+import { Resend } from 'resend';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 interface EmailOptions {
   to: string;
@@ -10,44 +11,47 @@ interface EmailOptions {
   text?: string;
 }
 
+interface SendEmailResult {
+  success: boolean;
+  resendId?: string;
+}
+
 /**
- * Send an email using a configured email service
- * Currently uses a mock implementation - replace with actual service (SendGrid, AWS SES, etc)
+ * Core email sender using Resend
  */
-export async function sendEmail(options: EmailOptions): Promise<boolean> {
+export async function sendEmail(options: EmailOptions): Promise<SendEmailResult> {
   try {
-    // In production, replace this with your actual email service
-    // Example services: SendGrid, AWS SES, Resend, Brevo, etc.
+    if (!process.env.RESEND_API_KEY) {
+      console.error('❌ RESEND_API_KEY is missing');
+      return { success: false };
+    }
 
-    // Mock email sending (logs to console and simulates success)
-    console.log('📧 Email sent:');
-    console.log(`   To: ${options.to}`);
-    console.log(`   Subject: ${options.subject}`);
-    console.log(`   HTML Body: ${options.html.substring(0, 100)}...`);
+    const from =
+      process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
 
-    // In production, uncomment and use your actual email service:
-    /*
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: options.to }] }],
-        from: { email: process.env.ADMIN_EMAIL || 'noreply@precisegovcon.com' },
-        subject: options.subject,
-        content: [{ type: 'text/html', value: options.html }],
-      }),
+    const { data, error } = await resend.emails.send({
+      from,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
     });
 
-    return response.ok;
-    */
+    if (error) {
+      console.error('❌ Resend error:', error);
+      return { success: false };
+    }
 
-    return true; // Mock success
+    console.log('✅ Email sent via Resend:', {
+      to: options.to,
+      subject: options.subject,
+      id: data?.id,
+    });
+
+    return { success: true, resendId: data?.id };
   } catch (error) {
-    console.error('Failed to send email:', error);
-    return false;
+    console.error('Failed to send email via Resend:', error);
+    return { success: false };
   }
 }
 
@@ -119,12 +123,12 @@ export async function sendNewUserWelcomeEmail(
     </html>
   `;
 
-  return sendEmail({
-    to: userEmail,
-    subject,
-    html,
-    text: `Welcome to PreciseGovCon! Your account has been created with ${planTier.toUpperCase()} tier. Login at ${process.env.NEXT_PUBLIC_APP_URL || 'https://admin.precisegovcon.com'}/login`,
+  const result = await sendEmail({ to: userEmail, subject, html,
+    text: `Welcome to PreciseGovCon! Your account has been created with ${planTier.toUpperCase()} tier. Login at ${
+      process.env.NEXT_PUBLIC_APP_URL || 'https://admin.precisegovcon.com'
+    }/login`,
   });
+  return result.success;
 }
 
 /**
@@ -179,12 +183,10 @@ export async function sendAdminNewUserNotification(
     </html>
   `;
 
-  return sendEmail({
-    to: adminEmail,
-    subject,
-    html,
+  const result = await sendEmail({ to: adminEmail, subject, html,
     text: `New user ${userName} (${userEmail}) registered with ${planTier} tier.`,
   });
+  return result.success;
 }
 
 /**
@@ -195,7 +197,9 @@ export async function sendPasswordResetEmail(
   userName: string,
   resetToken: string
 ): Promise<boolean> {
-  const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://admin.precisegovcon.com'}/reset-password?token=${resetToken}`;
+  const resetUrl = `${
+    process.env.NEXT_PUBLIC_APP_URL || 'https://admin.precisegovcon.com'
+  }/reset-password?token=${resetToken}`;
 
   const subject = '🔐 Reset Your PreciseGovCon Password';
 
@@ -237,12 +241,10 @@ export async function sendPasswordResetEmail(
     </html>
   `;
 
-  return sendEmail({
-    to: userEmail,
-    subject,
-    html,
+  const result = await sendEmail({ to: userEmail, subject, html,
     text: `Reset your password here: ${resetUrl}`,
   });
+  return result.success;
 }
 
 /**
@@ -283,7 +285,7 @@ export async function sendEmailVerificationEmail(options: {
           <div class="content">
             <p>Hello <strong>${options.firstName}</strong>,</p>
 
-            <p>Thank you for signing up for PreciseGovCon Admin Portal! To activate your account, please verify your email address by clicking the button below:</p>
+            <p>Thank you for signing up for PreciseGovCon! To activate your account, please verify your email address:</p>
 
             <center>
               <a href="${options.verificationUrl}" class="button">Verify Email Address</a>
@@ -318,10 +320,8 @@ export async function sendEmailVerificationEmail(options: {
     </html>
   `;
 
-  return sendEmail({
-    to: options.email,
-    subject,
-    html,
+  const result = await sendEmail({ to: options.email, subject, html,
     text: `Verify your email: ${options.verificationUrl}`,
   });
+  return result.success;
 }

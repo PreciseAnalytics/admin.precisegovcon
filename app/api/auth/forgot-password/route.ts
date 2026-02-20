@@ -1,7 +1,9 @@
+// app/api/auth/forgot-password/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
-import { sendPasswordResetEmail } from '@/lib/email';
-import prisma from '@/lib/prisma';
 import crypto from 'crypto';
+import prisma from '@/lib/prisma';
+import { sendPasswordResetEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,21 +27,31 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Always return success message even if user not found (security)
     if (!user) {
-      // For security, don't reveal if email exists or not
-      // Return success message either way
       return NextResponse.json({
         success: true,
-        message: 'If an account with this email exists, password reset instructions have been sent.',
+        message:
+          'If an account with this email exists, password reset instructions have been sent.',
       });
     }
 
-    // Generate a reset token (in production, store this in database with expiration)
-    // For now, we'll create a simple token
+    // Generate a reset token and expiry (1 hour)
     const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
 
-    // Log the token to console (in production, store in database)
-    console.log(`🔐 Password reset token for ${user.email}: ${resetToken}`);
+    // Store token on user
+    await prisma.adminUser.update({
+      where: { id: user.id },
+      data: {
+        resetToken,
+        resetTokenExpiry,
+      },
+    });
+
+    console.log(
+      `🔐 Password reset token for ${user.email}: ${resetToken}`
+    );
 
     // Send password reset email
     const emailSent = await sendPasswordResetEmail(
@@ -49,16 +61,22 @@ export async function POST(request: NextRequest) {
     );
 
     if (!emailSent) {
-      console.error('Failed to send password reset email to:', user.email);
-      return NextResponse.json(
-        { error: 'Failed to send reset email. Please try again.' },
-        { status: 500 }
+      console.error(
+        'Failed to send password reset email to:',
+        user.email
       );
+      // Still respond success to avoid leaking existence
+      return NextResponse.json({
+        success: true,
+        message:
+          'If an account with this email exists, password reset instructions have been sent.',
+      });
     }
 
     return NextResponse.json({
       success: true,
-      message: 'If an account with this email exists, password reset instructions have been sent.',
+      message:
+        'If an account with this email exists, password reset instructions have been sent.',
     });
   } catch (error) {
     console.error('Forgot password error:', error);

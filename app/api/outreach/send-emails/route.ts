@@ -1,6 +1,9 @@
+// app/api/outreach/send-emails/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
 import { sendEmail } from '@/lib/email';
+import { prisma } from '@/lib/prisma';
 
 interface Contractor {
   id: string;
@@ -14,6 +17,8 @@ interface EmailTemplate {
   name: string;
   subject: string;
   body: string;
+  offerCode?: string;
+  category?: 'cold' | 'followup' | 'opportunity' | 'onboarding';
 }
 
 interface SendEmailsRequest {
@@ -33,10 +38,8 @@ export async function POST(request: NextRequest) {
     let sentCount = 0;
     let failedCount = 0;
 
-    // Send emails to each contractor
     for (const contractor of body.contractors) {
       try {
-        // Personalize email if requested
         let subject = body.template.subject;
         let emailBody = body.template.body;
 
@@ -50,8 +53,7 @@ export async function POST(request: NextRequest) {
             .replace('[CONTACT_NAME]', contractor.name);
         }
 
-        // Send email
-        const success = await sendEmail({
+        const result = await sendEmail({
           to: contractor.email,
           subject,
           html: `
@@ -91,34 +93,71 @@ export async function POST(request: NextRequest) {
           text: emailBody,
         });
 
-        if (success) {
+        if (result.success) {
           sentCount++;
+
+          // Write to email_logs
+          await prisma.emailLog.create({
+            data: {
+              contractor_id: contractor.id,
+              subject,
+              body: emailBody,
+              offer_code: body.template.offerCode || null,
+              campaign_type: body.template.category || 'cold',
+              status: 'sent',
+              resend_id: result.resendId || null,
+            },
+          });
+
+          // Log CRM activity
+          await prisma.crmActivity.create({
+            data: {
+              contractor_id: contractor.id,
+              type: 'email_sent',
+              description: `Email sent: "${subject}"`,
+              metadata: {
+                template_id: body.template.id,
+                template_name: body.template.name,
+                resend_id: result.resendId || null,
+              },
+              created_by: 'system',
+            },
+          });
+
+          // Update contractor contacted flag and pipeline stage if still "new"
+          await prisma.contractor.update({
+            where: { id: contractor.id },
+            data: {
+              contacted: true,
+              contact_attempts: { increment: 1 },
+              last_contact: new Date(),
+              pipeline_stage: 'contacted',
+            },
+          });
+
           console.log(`📧 Email sent to ${contractor.email}`);
         } else {
           failedCount++;
+
+          // Log failed attempt
+          await prisma.emailLog.create({
+            data: {
+              contractor_id: contractor.id,
+              subject,
+              body: emailBody,
+              offer_code: body.template.offerCode || null,
+              campaign_type: body.template.category || 'cold',
+              status: 'failed',
+              resend_id: null,
+            },
+          });
+
           console.error(`❌ Failed to send email to ${contractor.email}`);
         }
       } catch (error) {
         failedCount++;
         console.error(`Error sending email to ${contractor.email}:`, error);
       }
-    }
-
-    // Log outreach activity
-    try {
-      await fetch(`/api/outreach/log`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'EMAIL_CAMPAIGN',
-          templateId: body.template.id,
-          sentCount,
-          failedCount,
-          contractorIds: body.contractors.map((c) => c.id),
-        }),
-      });
-    } catch (error) {
-      console.error('Failed to log outreach activity:', error);
     }
 
     return NextResponse.json({

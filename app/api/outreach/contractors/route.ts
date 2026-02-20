@@ -1,103 +1,141 @@
+// app/api/outreach/contractors/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
     await requireSession();
 
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get('search') || '';
-    const limit = parseInt(searchParams.get('limit') || '50');
 
-    // Mock SAM.gov contractor data
-    // In production, this would fetch from SAM.gov API
-    const mockContractors = [
-      {
-        id: '1',
-        name: 'Advanced IT Solutions LLC',
-        email: 'contact@advanceditsolutions.com',
-        company: 'Advanced IT Solutions LLC',
-        businessType: 'IT Services',
-        registrationDate: '2024-01-15',
-        samgovId: 'SAM123456',
-        contacted: false,
-        enrolled: false,
-        contactAttempts: 0,
-      },
-      {
-        id: '2',
-        name: 'Government Consulting Partners',
-        email: 'sales@govcons ultingpartners.com',
-        company: 'Government Consulting Partners',
-        businessType: 'Management Consulting',
-        registrationDate: '2024-01-20',
-        samgovId: 'SAM123457',
-        contacted: true,
-        enrolled: false,
-        contactAttempts: 1,
-      },
-      {
-        id: '3',
-        name: 'Federal Technology Inc',
-        email: 'business@fedtech.com',
-        company: 'Federal Technology Inc',
-        businessType: 'Software Development',
-        registrationDate: '2024-01-25',
-        samgovId: 'SAM123458',
-        contacted: true,
-        enrolled: true,
-        contactAttempts: 1,
-      },
-      {
-        id: '4',
-        name: 'Defense Contractor Services',
-        email: 'inquiry@defensecontractors.com',
-        company: 'Defense Contractor Services',
-        businessType: 'Defense & Security',
-        registrationDate: '2024-02-01',
-        samgovId: 'SAM123459',
-        contacted: false,
-        enrolled: false,
-        contactAttempts: 0,
-      },
-      {
-        id: '5',
-        name: 'Infrastructure Solutions Group',
-        email: 'contact@infrasolutions.com',
-        company: 'Infrastructure Solutions Group',
-        businessType: 'Infrastructure',
-        registrationDate: '2024-02-05',
-        samgovId: 'SAM123460',
-        contacted: false,
-        enrolled: false,
-        contactAttempts: 0,
-      },
-    ];
+    // ── Pagination ─────────────────────────────────────────────────────────
+    const page  = Math.max(1, parseInt(searchParams.get('page')  || '1'));
+    const limit = Math.min(200, Math.max(10, parseInt(searchParams.get('limit') || '50')));
+    const skip  = (page - 1) * limit;
 
-    // Filter by search term
-    let filtered = mockContractors;
+    // ── Campaign Filters ───────────────────────────────────────────────────
+    const search            = searchParams.get('search')            || '';
+    const states            = searchParams.get('states')            || '';   // comma-separated
+    const naicsCodes        = searchParams.get('naicsCodes')        || '';   // comma-separated
+    const businessTypes     = searchParams.get('businessTypes')     || '';   // comma-separated
+    const pipelineStages    = searchParams.get('pipelineStages')    || '';   // comma-separated
+    const regDateFrom       = searchParams.get('regDateFrom')       || '';   // YYYY-MM-DD
+    const regDateTo         = searchParams.get('regDateTo')         || '';   // YYYY-MM-DD
+    const notContactedOnly  = searchParams.get('notContactedOnly')  === 'true';
+    const minScore          = searchParams.get('minScore')          ? parseInt(searchParams.get('minScore')!) : undefined;
+    const maxScore          = searchParams.get('maxScore')          ? parseInt(searchParams.get('maxScore')!) : undefined;
+    const priority          = searchParams.get('priority')          || '';   // high | medium | low
+    const enrolledFilter    = searchParams.get('enrolled');                  // 'true' | 'false' | ''
+
+    // ── Build WHERE clause ─────────────────────────────────────────────────
+    const where: any = {};
+
     if (search) {
-      const searchLower = search.toLowerCase();
-      filtered = mockContractors.filter(
-        (c) =>
-          c.name.toLowerCase().includes(searchLower) ||
-          c.email.toLowerCase().includes(searchLower) ||
-          c.company.toLowerCase().includes(searchLower)
-      );
+      where.OR = [
+        { name:       { contains: search, mode: 'insensitive' } },
+        { email:      { contains: search, mode: 'insensitive' } },
+        { uei_number: { contains: search, mode: 'insensitive' } },
+        { naics_code: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
-    // Apply limit
-    const contractors = filtered.slice(0, limit);
+    if (states) {
+      where.state = { in: states.split(',').map(s => s.trim()).filter(Boolean) };
+    }
+
+    if (naicsCodes) {
+      const codes = naicsCodes.split(',').map(s => s.trim()).filter(Boolean);
+      where.OR = [
+        ...(where.OR || []),
+        ...codes.map(code => ({ naics_code: { startsWith: code } })),
+      ];
+    }
+
+    if (businessTypes) {
+      where.business_type = { in: businessTypes.split(',').map(s => s.trim()).filter(Boolean) };
+    }
+
+    if (pipelineStages) {
+      where.pipeline_stage = { in: pipelineStages.split(',').map(s => s.trim()).filter(Boolean) };
+    }
+
+    if (regDateFrom || regDateTo) {
+      where.registration_date = {};
+      if (regDateFrom) where.registration_date.gte = new Date(regDateFrom);
+      if (regDateTo)   where.registration_date.lte = new Date(regDateTo);
+    }
+
+    if (notContactedOnly) {
+      where.contacted = false;
+    }
+
+    if (minScore !== undefined || maxScore !== undefined) {
+      where.score = {};
+      if (minScore !== undefined) where.score.gte = minScore;
+      if (maxScore !== undefined) where.score.lte = maxScore;
+    }
+
+    if (priority) {
+      where.priority = priority;
+    }
+
+    if (enrolledFilter === 'true')  where.enrolled = true;
+    if (enrolledFilter === 'false') where.enrolled = false;
+
+    // ── Execute ────────────────────────────────────────────────────────────
+    const [contractors, total] = await Promise.all([
+      prisma.contractor.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [
+          { score:        'desc' },
+          { created_at:   'desc' },
+        ],
+        select: {
+          id:                true,
+          uei_number:        true,
+          name:              true,
+          email:             true,
+          state:             true,
+          naics_code:        true,
+          business_type:     true,
+          registration_date: true,
+          contacted:         true,
+          enrolled:          true,
+          contact_attempts:  true,
+          offer_code:        true,
+          notes:             true,
+          priority:          true,
+          score:             true,
+          pipeline_stage:    true,
+          trial_start:       true,
+          trial_end:         true,
+          revenue:           true,
+          last_contact:      true,
+          created_at:        true,
+        },
+      }),
+      prisma.contractor.count({ where }),
+    ]);
 
     return NextResponse.json({
       contractors,
-      total: filtered.length,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+      filters: {
+        search, states, naicsCodes, businessTypes,
+        pipelineStages, regDateFrom, regDateTo,
+        notContactedOnly, minScore, maxScore, priority, enrolledFilter,
+      },
     });
   } catch (error) {
     console.error('Error fetching contractors:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch contractors' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch contractors' }, { status: 500 });
   }
 }

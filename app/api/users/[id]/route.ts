@@ -7,20 +7,25 @@ import { z } from 'zod';
 const updateUserSchema = z.object({
   email: z.string().email().optional(),
   name: z.string().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
   company: z.string().optional(),
+  phone: z.string().optional(),
   plan_tier: z.string().optional(),
   plan_status: z.string().optional(),
   is_active: z.boolean().optional(),
   is_suspended: z.boolean().optional(),
 });
 
-
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    await requireSession();
+    const session = await requireSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: params.id },
@@ -28,7 +33,10 @@ export async function GET(
         id: true,
         email: true,
         name: true,
+        firstName: true,
+        lastName: true,
         company: true,
+        phone: true,
         plan: true,
         plan_tier: true,
         plan_status: true,
@@ -37,25 +45,23 @@ export async function GET(
         last_login_at: true,
         is_active: true,
         is_suspended: true,
+        email_verified: true,
         stripe_customer_id: true,
         stripe_subscription_id: true,
       },
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     return NextResponse.json({ user });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message?.includes('Unauthorized')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     console.error('Error fetching user:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch user' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 });
   }
 }
 
@@ -63,8 +69,15 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  let session: Awaited<ReturnType<typeof requireSession>> | null = null;
+
   try {
-    const session = await requireSession();
+    session = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const body = await request.json();
     const updates = updateUserSchema.parse(body);
 
@@ -75,7 +88,10 @@ export async function PATCH(
         id: true,
         email: true,
         name: true,
+        firstName: true,
+        lastName: true,
         company: true,
+        phone: true,
         plan_tier: true,
         plan_status: true,
         is_active: true,
@@ -84,54 +100,66 @@ export async function PATCH(
     });
 
     if (!currentUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     // Update user
     const updatedUser = await prisma.user.update({
       where: { id: params.id },
       data: updates,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        firstName: true,
+        lastName: true,
+        company: true,
+        phone: true,
+        plan: true,
+        plan_tier: true,
+        plan_status: true,
+        created_at: true,
+        updated_at: true,
+        last_login_at: true,
+        is_active: true,
+        is_suspended: true,
+        email_verified: true,
+        stripe_customer_id: true,
+        stripe_subscription_id: true,
+      },
     });
 
-    // Log the update
-    await logUserUpdate(
-      session.id,
-      params.id,
-      currentUser,
-      updatedUser
-    );
+    // Audit log — wrapped so it never breaks the response
+    try {
+      await logUserUpdate(session.id, params.id, currentUser, updatedUser);
 
-    // Log specific suspend/unsuspend actions
-    if (updates.is_suspended !== undefined && updates.is_suspended !== currentUser.is_suspended) {
-      await createAuditLog({
-        adminUserId: session.id,
-        action: updates.is_suspended ? 'SUSPEND_USER' : 'UNSUSPEND_USER',
-        entityType: 'User',
-        entityId: params.id,
-        changesBefore: { is_suspended: currentUser.is_suspended },
-        changesAfter: { is_suspended: updates.is_suspended },
-      });
+      if (updates.is_suspended !== undefined && updates.is_suspended !== currentUser.is_suspended) {
+        await createAuditLog({
+          adminUserId: session.id,
+          action: updates.is_suspended ? 'SUSPEND_USER' : 'UNSUSPEND_USER',
+          entityType: 'User',
+          entityId: params.id,
+          changesBefore: { is_suspended: currentUser.is_suspended },
+          changesAfter: { is_suspended: updates.is_suspended },
+        });
+      }
+
+      if (updates.is_active !== undefined && updates.is_active !== currentUser.is_active) {
+        await createAuditLog({
+          adminUserId: session.id,
+          action: updates.is_active ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
+          entityType: 'User',
+          entityId: params.id,
+          changesBefore: { is_active: currentUser.is_active },
+          changesAfter: { is_active: updates.is_active },
+        });
+      }
+    } catch (auditError) {
+      // Never let audit failure break the save
+      console.error('Audit log failed (non-fatal):', auditError);
     }
 
-    // Log specific activate/deactivate actions
-    if (updates.is_active !== undefined && updates.is_active !== currentUser.is_active) {
-      await createAuditLog({
-        adminUserId: session.id,
-        action: updates.is_active ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
-        entityType: 'User',
-        entityId: params.id,
-        changesBefore: { is_active: currentUser.is_active },
-        changesAfter: { is_active: updates.is_active },
-      });
-    }
-
-    return NextResponse.json({
-      success: true,
-      user: updatedUser,
-    });
+    return NextResponse.json({ success: true, user: updatedUser });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -139,12 +167,8 @@ export async function PATCH(
         { status: 400 }
       );
     }
-
     console.error('Error updating user:', error);
-    return NextResponse.json(
-      { error: 'Failed to update user' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
   }
 }
 
@@ -152,10 +176,15 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  try {
-    const session = await requireSession();
+  let session: Awaited<ReturnType<typeof requireSession>> | null = null;
 
-    // Get user data for audit before deletion
+  try {
+    session = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const user = await prisma.user.findUnique({
       where: { id: params.id },
       select: {
@@ -169,34 +198,20 @@ export async function DELETE(
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Delete user
-    await prisma.user.delete({
-      where: { id: params.id },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-      },
-    });
+    await prisma.user.delete({ where: { id: params.id } });
 
-    // Log deletion
-    await logUserDeletion(session.id, params.id, user);
+    try {
+      await logUserDeletion(session.id, params.id, user);
+    } catch (auditError) {
+      console.error('Audit log failed (non-fatal):', auditError);
+    }
 
-    return NextResponse.json({
-      success: true,
-      message: 'User deleted successfully',
-    });
+    return NextResponse.json({ success: true, message: 'User deleted successfully' });
   } catch (error) {
     console.error('Error deleting user:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete user' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 });
   }
 }
