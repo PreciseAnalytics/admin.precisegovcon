@@ -1,186 +1,184 @@
 // app/api/track/signup/route.ts
-//
-// Called by your MAIN APP (sam-gov-search-app) when a user completes signup
-// using an offer code. This is the webhook that closes the loop between
-// code redemption on the main app and the admin CRM pipeline.
-//
-// POST /api/track/signup
-// Body: { email, offer_code, user_id?, contractor_id? }
-//
-// Secured with WEBHOOK_SECRET env var (shared secret between apps).
-// The main app sends:  Authorization: Bearer <WEBHOOK_SECRET>
-//
-// Flow:
-//  1. Validate secret
-//  2. Find contractor by email (or contractor_id)
-//  3. Increment offer_codes.usage_count
-//  4. Set contractor: enrolled=true, pipeline_stage='trial',
-//     trial_start=today, trial_end=today+14
-//  5. Log crm_activities: code_redeemed + signed_up
-//  6. Return 200
 
 import { NextRequest, NextResponse } from 'next/server';
+import { sendEmail } from '@/lib/email';
 import prisma from '@/lib/prisma';
+import { buildWelcomeEmail, buildAdminNotificationEmail } from '@/lib/email-templates';
 
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
+const ADMIN_BASE_URL =
+  process.env.NEXT_PUBLIC_ADMIN_URL ||
+  process.env.NEXTAUTH_URL ||
+  'https://admin.precisegovcon.com';
 
-export async function POST(req: NextRequest) {
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  const auth = req.headers.get('authorization') || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+const APP_URL   = process.env.NEXT_PUBLIC_APP_URL   || 'https://app.precisegovcon.com';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL         || 'admin@preciseanalytics.io';
 
-  if (!WEBHOOK_SECRET || token !== WEBHOOK_SECRET) {
-    console.warn('[track/signup] Unauthorized attempt');
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+function formatDate(d: Date): string {
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
 
-  // ── Parse body ────────────────────────────────────────────────────────────
-  let body: {
-    email?: string;
-    offer_code?: string;
-    user_id?: string;
-    contractor_id?: string;
-    trial_days?: number;
-  };
-
+export async function POST(request: NextRequest) {
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
+    const body = await request.json();
+    const { email, offer_code, trial_days = 14 } = body;
 
-  const { email, offer_code, user_id, contractor_id, trial_days = 14 } = body;
+    if (!email || !offer_code) {
+      return NextResponse.json({ error: 'email and offer_code are required' }, { status: 400 });
+    }
 
-  if (!email && !contractor_id) {
-    return NextResponse.json(
-      { error: 'email or contractor_id required' },
-      { status: 400 }
-    );
-  }
+    // ── 1. Validate offer code ───────────────────────────────────────────────
+    const code = await prisma.offerCode.findFirst({
+      where: { code: offer_code.toUpperCase(), active: true },
+    });
 
-  try {
-    // ── 1. Find contractor ────────────────────────────────────────────────
-    let contractor = contractor_id
-      ? await prisma.contractor.findUnique({ where: { id: contractor_id } })
-      : await prisma.contractor.findFirst({
-          where: { email: { equals: email, mode: 'insensitive' } },
-        });
+    if (!code) {
+      return NextResponse.json({ error: 'Invalid or inactive offer code' }, { status: 400 });
+    }
+
+    if (code.expires_at && new Date(code.expires_at) < new Date()) {
+      return NextResponse.json({ error: 'This offer code has expired' }, { status: 400 });
+    }
+
+    if (code.max_usage !== null && code.usage_count >= code.max_usage) {
+      return NextResponse.json({ error: 'This offer code has reached its usage limit' }, { status: 400 });
+    }
+
+    // ── 2. Find contractor by email ─────────────────────────────────────────
+    const contractor = await prisma.contractor.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+    });
 
     if (!contractor) {
-      // Contractor not in our DB yet — still track the code redemption
-      console.log(`[track/signup] Contractor not found for email=${email}, logging code redemption only`);
+      return NextResponse.json({ error: 'No contractor found with this email address' }, { status: 404 });
     }
 
-    // ── 2. Validate & increment offer code ────────────────────────────────
-    let offerCodeRecord = null;
-    if (offer_code) {
-      offerCodeRecord = await prisma.offerCode.findUnique({
-        where: { code: offer_code.toUpperCase() },
-      });
+    // ── 3. Calculate trial dates ─────────────────────────────────────────────
+    const trialStart = new Date();
+    const trialEnd   = new Date(Date.now() + trial_days * 86400000);
 
-      if (offerCodeRecord) {
-        // Check limits
-        if (offerCodeRecord.max_usage && offerCodeRecord.usage_count >= offerCodeRecord.max_usage) {
-          return NextResponse.json({ error: 'Offer code has reached max usage' }, { status: 400 });
-        }
-        if (!offerCodeRecord.active) {
-          return NextResponse.json({ error: 'Offer code is inactive' }, { status: 400 });
-        }
-        if (offerCodeRecord.expires_at && new Date(offerCodeRecord.expires_at) < new Date()) {
-          return NextResponse.json({ error: 'Offer code has expired' }, { status: 400 });
-        }
+    // ── 4. Update contractor record ──────────────────────────────────────────
+    const updated = await prisma.contractor.update({
+      where: { id: contractor.id },
+      data: {
+        enrolled:       true,
+        contacted:      true,
+        offer_code:     offer_code.toUpperCase(),
+        pipeline_stage: 'trial',
+        trial_start:    trialStart,
+        trial_end:      trialEnd,
+        last_contact:   new Date(),
+      },
+    });
 
-        await prisma.offerCode.update({
-          where: { code: offer_code.toUpperCase() },
-          data:  { usage_count: { increment: 1 }, updated_at: new Date() },
-        });
-      }
-    }
+    // ── 5. Increment offer code usage ────────────────────────────────────────
+    await prisma.offerCode.update({
+      where: { id: code.id },
+      data:  { usage_count: { increment: 1 } },
+    });
 
-    // ── 3. Update contractor pipeline ─────────────────────────────────────
-    if (contractor) {
-      const trialStart = new Date();
-      const trialEnd   = new Date(Date.now() + trial_days * 86_400_000);
-
-      await prisma.contractor.update({
-        where: { id: contractor.id },
-        data: {
-          enrolled:       true,
-          contacted:      true,
-          pipeline_stage: 'trial',
-          trial_start:    trialStart,
-          trial_end:      trialEnd,
-          offer_code:     offer_code?.toUpperCase() || contractor.offer_code,
-        },
-      });
-
-      // ── 4. Log CRM activities ───────────────────────────────────────────
-      const activityBase = {
+    // ── 6. Log CRM activity ──────────────────────────────────────────────────
+    await prisma.crmActivity.create({
+      data: {
         contractor_id: contractor.id,
-        created_by:    'system',
-        created_at:    new Date(),
-      };
-
-      if (offer_code && offerCodeRecord) {
-        await prisma.crmActivity.create({
-          data: {
-            ...activityBase,
-            offer_code_id: offerCodeRecord.id,
-            type:          'code_redeemed',
-            description:   `Offer code ${offer_code.toUpperCase()} redeemed`,
-            metadata: {
-              offer_code,
-              discount:    offerCodeRecord.discount,
-              user_id:     user_id || null,
-              email,
-            },
-          },
-        });
-      }
-
-      await prisma.crmActivity.create({
-        data: {
-          ...activityBase,
-          type:        'signed_up',
-          description: `Signed up via ${offer_code ? `code ${offer_code.toUpperCase()}` : 'direct'}`,
-          metadata: {
-            user_id:     user_id    || null,
-            email:       email      || null,
-            offer_code:  offer_code || null,
-            trial_days,
-            trial_end:   new Date(Date.now() + trial_days * 86_400_000).toISOString(),
-          },
+        type:          'signed_up',
+        description:   `Signed up via offer code ${offer_code.toUpperCase()} — trial active until ${formatDate(trialEnd)}`,
+        metadata: {
+          offer_code,
+          trial_start: trialStart.toISOString(),
+          trial_end:   trialEnd.toISOString(),
         },
-      });
+        created_by: 'system',
+      },
+    });
 
-      await prisma.crmActivity.create({
-        data: {
-          ...activityBase,
-          type:        'stage_changed',
-          description: `Stage: ${contractor.pipeline_stage || 'new'} → trial`,
-          metadata:    { from: contractor.pipeline_stage || 'new', to: 'trial' },
-        },
-      });
+    // ── 7. Send welcome email to contractor ──────────────────────────────────
+    // Ensure we have an email to send to
+    if (!contractor.email) {
+      throw new Error('Contractor has no email address');
     }
 
-    console.log(
-      `[track/signup] ✅ email=${email} code=${offer_code} contractor=${contractor?.id || 'not found'}`
-    );
+    const welcomeHtml = buildWelcomeEmail({
+      companyName: contractor.name || 'Your company',
+      email:       contractor.email, // Now we know this is not null
+      offerCode:   offer_code.toUpperCase(),
+      trialStart:  formatDate(trialStart),
+      trialEnd:    formatDate(trialEnd),
+      loginUrl:    `${APP_URL}/dashboard`,
+    });
+
+    const welcomeSubject = `Welcome to PreciseGovCon — your 14-day trial is active, ${contractor.name || 'there'}`;
+
+    const welcomeResult = await sendEmail({
+      to:      contractor.email,
+      subject: welcomeSubject,
+      html:    welcomeHtml,
+      text:    `Welcome to PreciseGovCon! Your 14-day free trial is now active (expires ${formatDate(trialEnd)}). Log in at ${APP_URL}/dashboard`,
+    });
+
+    // Log welcome email
+    await prisma.emailLog.create({
+      data: {
+        contractor_id: contractor.id,
+        subject:       welcomeSubject,
+        body:          `Welcome email sent on trial activation`,
+        offer_code:    offer_code.toUpperCase(),
+        campaign_type: 'onboarding',
+        status:        welcomeResult.success ? 'sent' : 'failed',
+        resend_id:     welcomeResult.resendId || null,
+      },
+    });
+
+    // ── 8. Send admin notification ───────────────────────────────────────────
+    const adminHtml = buildAdminNotificationEmail({
+      companyName:  contractor.name || 'Unknown Company',
+      email:        contractor.email, // Now we know this is not null
+      offerCode:    offer_code.toUpperCase(),
+      trialEnd:     formatDate(trialEnd),
+      businessType: contractor.business_type || 'Small Business',
+      state:        contractor.state || '—',
+      naicsCode:    contractor.naics_code || '—',
+      adminCrmUrl:  `${ADMIN_BASE_URL}/dashboard/outreach`,
+    });
+
+    await sendEmail({
+      to:      ADMIN_EMAIL,
+      subject: `🆕 New Trial: ${contractor.name || 'Unknown Company'} activated with code ${offer_code.toUpperCase()}`,
+      html:    adminHtml,
+      text:    `New trial signup: ${contractor.name || 'Unknown Company'} (${contractor.email}) activated code ${offer_code.toUpperCase()}. Trial ends ${formatDate(trialEnd)}.`,
+    });
+
+    console.log(`✅ Trial activated: ${contractor.name || 'Unknown'} (${contractor.email}) → ${formatDate(trialEnd)}`);
 
     return NextResponse.json({
-      success:      true,
-      contractor_id: contractor?.id || null,
-      trial_days,
-      offer_code:   offer_code?.toUpperCase() || null,
-      usage_count:  offerCodeRecord ? offerCodeRecord.usage_count + 1 : null,
+      success:     true,
+      message:     'Trial activated successfully',
+      trial_end:   trialEnd.toISOString(),
+      usage_count: code.usage_count + 1,
+      contractor: {
+        id:    contractor.id,
+        name:  contractor.name,
+        email: contractor.email,
+      },
     });
-  } catch (err: any) {
-    console.error('[track/signup]', err);
-    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
+  } catch (error) {
+    console.error('[track/signup] Fatal:', error);
+    return NextResponse.json({ error: 'Failed to activate trial' }, { status: 500 });
   }
 }
 
-// Health check
-export async function GET() {
-  return NextResponse.json({ ok: true, endpoint: 'track/signup' });
+// ── GET — validate code without redeeming (used by signup page on load) ──────
+export async function GET(request: NextRequest) {
+  const code = request.nextUrl.searchParams.get('code');
+  if (!code) return NextResponse.json({ valid: false });
+
+  const offerCode = await prisma.offerCode.findFirst({
+    where: { code: code.toUpperCase(), active: true },
+    select: { code: true, description: true, discount: true, expires_at: true, max_usage: true, usage_count: true },
+  });
+
+  if (!offerCode) return NextResponse.json({ valid: false, error: 'Invalid or inactive code' });
+  if (offerCode.expires_at && new Date(offerCode.expires_at) < new Date()) return NextResponse.json({ valid: false, error: 'Code has expired' });
+  if (offerCode.max_usage !== null && offerCode.usage_count >= offerCode.max_usage) return NextResponse.json({ valid: false, error: 'Code usage limit reached' });
+
+  return NextResponse.json({ valid: true, code: offerCode });
 }
