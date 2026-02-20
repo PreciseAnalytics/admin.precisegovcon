@@ -1272,7 +1272,9 @@ export default function OutreachPage() {
                 else if (view === 'contacted')  count = stats.contacted;
                 else if (view === 'enrolled')   count = stats.enrolled;
                 else if (view === 'inProgress') count = stats.inProgress;
-                else count = Math.round(stats.successRate);
+                else count = stats.contacted > 0
+                ? Math.round((stats.enrolled / stats.contacted) * 100)
+                : 0;
                 return (
                   <button
                     key={view}

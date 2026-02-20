@@ -1,8 +1,4 @@
-// app/api/outreach/send-emails/route.ts
-//
-// Updated to inject a tracking pixel into every email so opens are tracked
-// automatically. The pixel URL is:
-//   GET /api/track/open?id={emailLogId}&cid={contractorId}
+// app/api/outreach/send/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
