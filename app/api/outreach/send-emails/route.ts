@@ -1,15 +1,23 @@
 // app/api/outreach/send-emails/route.ts
+//
+// Updated to inject a tracking pixel into every email so opens are tracked
+// automatically. The pixel URL is:
+//   GET /api/track/open?id={emailLogId}&cid={contractorId}
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
 import { sendEmail } from '@/lib/email';
-import { prisma } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 interface Contractor {
   id: string;
   name: string;
   email: string;
   company?: string;
+  naics_code?: string;
+  business_type?: string;
+  state?: string;
+  offer_code?: string;
 }
 
 interface EmailTemplate {
@@ -27,150 +35,221 @@ interface SendEmailsRequest {
   personalizeEmails: boolean;
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const ADMIN_BASE_URL =
+  process.env.NEXT_PUBLIC_ADMIN_URL ||
+  process.env.NEXTAUTH_URL          ||
+  'https://admin.precisegovcon.com';
+
 /**
- * Send personalized outreach emails to contractors
+ * Build a 1×1 tracking pixel <img> tag for the given email log ID.
+ * Placed just before </body> so it loads after the email renders.
  */
+function trackingPixel(emailLogId: string, contractorId: string): string {
+  const url = `${ADMIN_BASE_URL}/api/track/open?id=${emailLogId}&cid=${contractorId}`;
+  return `<img src="${url}" width="1" height="1" alt="" style="display:none;border:0;width:1px;height:1px;" />`;
+}
+
+/**
+ * Replace template variables with contractor-specific values.
+ */
+function personalize(text: string, contractor: Contractor, offerCode?: string): string {
+  return text
+    .replace(/\[COMPANY_NAME\]/g,  contractor.company || contractor.name)
+    .replace(/\[CONTACT_NAME\]/g,  contractor.name)
+    .replace(/\[NAICS_CODE\]/g,    contractor.naics_code   || '')
+    .replace(/\[BUSINESS_TYPE\]/g, contractor.business_type || '')
+    .replace(/\[STATE\]/g,         contractor.state         || '')
+    .replace(/\[OFFER_CODE\]/g,    offerCode || contractor.offer_code || '');
+}
+
+/**
+ * Convert plain-text email body to HTML paragraphs.
+ */
+function bodyToHtml(text: string): string {
+  return text
+    .split('\n\n')
+    .map(para => `<p style="margin:0 0 16px 0;">${para.replace(/\n/g, '<br/>')}</p>`)
+    .join('');
+}
+
+/**
+ * Build the full HTML email with header, content, tracking pixel, and footer.
+ * emailLogId is a placeholder that gets replaced after the DB row is created.
+ */
+function buildHtml(
+  emailBody:     string,
+  emailLogId:    string,
+  contractorId:  string,
+): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PreciseGovCon</title>
+</head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1e293b;line-height:1.6;">
+  <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#ea580c 0%,#f97316 100%);border-radius:12px 12px 0 0;padding:32px 24px;text-align:center;">
+      <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800;letter-spacing:-0.5px;">PreciseGovCon</h1>
+      <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Federal Business Intelligence & Bid Management</p>
+    </div>
+
+    <!-- Body -->
+    <div style="background:#fff;padding:32px 24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
+      ${bodyToHtml(emailBody)}
+
+      <!-- CTA Button -->
+      <div style="text-align:center;margin:28px 0;">
+        <a href="https://app.precisegovcon.com/signup"
+           style="display:inline-block;background:linear-gradient(135deg,#ea580c,#f97316);color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px;letter-spacing:0.2px;">
+          Start Free Trial →
+        </a>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="text-align:center;padding:20px 0 8px;color:#94a3b8;font-size:11px;">
+      <p style="margin:0 0 4px;">© ${new Date().getFullYear()} PreciseGovCon. Virginia | VOSB | Minority-Owned</p>
+      <p style="margin:0;">
+        <a href="https://precisegovcon.com/unsubscribe" style="color:#ea580c;text-decoration:none;">Unsubscribe</a>
+        &nbsp;·&nbsp;
+        <a href="https://precisegovcon.com/privacy" style="color:#ea580c;text-decoration:none;">Privacy</a>
+      </p>
+    </div>
+
+  </div>
+  ${trackingPixel(emailLogId, contractorId)}
+</body>
+</html>`;
+}
+
+// ── Route handler ─────────────────────────────────────────────────────────────
+
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession();
     const body: SendEmailsRequest = await request.json();
 
-    let sentCount = 0;
+    if (!body.contractors?.length || !body.template) {
+      return NextResponse.json({ error: 'contractors and template are required' }, { status: 400 });
+    }
+
+    let sentCount   = 0;
     let failedCount = 0;
 
     for (const contractor of body.contractors) {
       try {
-        let subject = body.template.subject;
-        let emailBody = body.template.body;
+        const offerCode = body.template.offerCode || contractor.offer_code || '';
 
-        if (body.personalizeEmails) {
-          subject = subject
-            .replace('[COMPANY_NAME]', contractor.company || contractor.name)
-            .replace('[CONTACT_NAME]', contractor.name);
+        // Personalize subject + body
+        const subject   = body.personalizeEmails
+          ? personalize(body.template.subject, contractor, offerCode)
+          : body.template.subject;
+        const emailBody = body.personalizeEmails
+          ? personalize(body.template.body, contractor, offerCode)
+          : body.template.body;
 
-          emailBody = emailBody
-            .replace('[COMPANY_NAME]', contractor.company || contractor.name)
-            .replace('[CONTACT_NAME]', contractor.name);
-        }
+        // ── Create email log row FIRST so we have the ID for the pixel ──
+        const logRow = await prisma.emailLog.create({
+          data: {
+            contractor_id: contractor.id,
+            subject,
+            body:          emailBody,
+            offer_code:    offerCode || null,
+            campaign_type: body.template.category || 'cold',
+            status:        'sent',   // optimistically 'sent'; updated to 'failed' below if needed
+            resend_id:     null,
+          },
+        });
 
+        // Build HTML with real tracking pixel
+        const html = buildHtml(emailBody, logRow.id, contractor.id);
+
+        // ── Send via Resend (or whatever sendEmail uses) ──
         const result = await sendEmail({
-          to: contractor.email,
+          to:      contractor.email,
           subject,
-          html: `
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <style>
-                  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #333; line-height: 1.6; }
-                  .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                  .header { background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
-                  .header h1 { margin: 0; font-size: 24px; }
-                  .content { background: white; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; }
-                  .cta { display: inline-block; background: #ea580c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-weight: 600; }
-                  .footer { text-align: center; padding-top: 20px; color: #666; font-size: 12px; }
-                </style>
-              </head>
-              <body>
-                <div class="container">
-                  <div class="header">
-                    <h1>PreciseGovCon</h1>
-                    <p>Your Partner in Government Contracting</p>
-                  </div>
-                  <div class="content">
-                    ${emailBody
-                      .split('\n\n')
-                      .map((para) => `<p>${para}</p>`)
-                      .join('')}
-                  </div>
-                  <div class="footer">
-                    <p>© 2025 PreciseGovCon. All rights reserved.</p>
-                    <p><a href="https://precisegovcon.com/unsubscribe" style="color: #ea580c;">Unsubscribe</a></p>
-                  </div>
-                </div>
-              </body>
-            </html>
-          `,
-          text: emailBody,
+          html,
+          text:    emailBody,
         });
 
         if (result.success) {
           sentCount++;
 
-          // Write to email_logs
-          await prisma.emailLog.create({
-            data: {
-              contractor_id: contractor.id,
-              subject,
-              body: emailBody,
-              offer_code: body.template.offerCode || null,
-              campaign_type: body.template.category || 'cold',
-              status: 'sent',
-              resend_id: result.resendId || null,
-            },
-          });
+          // Update log with resend_id
+          if (result.resendId) {
+            await prisma.emailLog.update({
+              where: { id: logRow.id },
+              data:  { resend_id: result.resendId },
+            });
+          }
 
           // Log CRM activity
           await prisma.crmActivity.create({
             data: {
               contractor_id: contractor.id,
-              type: 'email_sent',
-              description: `Email sent: "${subject}"`,
+              type:          'email_sent',
+              description:   `Email sent: "${subject}"`,
               metadata: {
-                template_id: body.template.id,
+                template_id:   body.template.id,
                 template_name: body.template.name,
-                resend_id: result.resendId || null,
+                email_log_id:  logRow.id,
+                resend_id:     result.resendId || null,
+                offer_code:    offerCode || null,
               },
-              created_by: 'system',
+              created_by: session.id,
             },
           });
 
-          // Update contractor contacted flag and pipeline stage if still "new"
+          // Increment template usage count
+          if (body.template.id && !body.template.id.startsWith('ai-')) {
+            await prisma.emailTemplate.update({
+              where: { id: body.template.id },
+              data:  { usage_count: { increment: 1 } },
+            }).catch(() => {}); // non-fatal
+          }
+
+          // Advance pipeline stage to 'contacted' if still 'new'
           await prisma.contractor.update({
             where: { id: contractor.id },
             data: {
-              contacted: true,
+              contacted:        true,
               contact_attempts: { increment: 1 },
-              last_contact: new Date(),
-              pipeline_stage: 'contacted',
+              last_contact:     new Date(),
+              pipeline_stage:   'contacted',
             },
           });
 
-          console.log(`📧 Email sent to ${contractor.email}`);
+          console.log(`📧 Sent → ${contractor.email} [log:${logRow.id}]`);
         } else {
           failedCount++;
 
-          // Log failed attempt
-          await prisma.emailLog.create({
-            data: {
-              contractor_id: contractor.id,
-              subject,
-              body: emailBody,
-              offer_code: body.template.offerCode || null,
-              campaign_type: body.template.category || 'cold',
-              status: 'failed',
-              resend_id: null,
-            },
+          await prisma.emailLog.update({
+            where: { id: logRow.id },
+            data:  { status: 'failed' },
           });
 
-          console.error(`❌ Failed to send email to ${contractor.email}`);
+          console.error(`❌ Failed → ${contractor.email}`);
         }
-      } catch (error) {
+      } catch (err) {
         failedCount++;
-        console.error(`Error sending email to ${contractor.email}:`, error);
+        console.error(`[send-emails] Error for ${contractor.email}:`, err);
       }
     }
 
     return NextResponse.json({
-      success: true,
+      success:      true,
       sentCount,
       failedCount,
-      message: `Sent ${sentCount} emails${failedCount > 0 ? ` (${failedCount} failed)` : ''}`,
+      message: `Sent ${sentCount} email${sentCount !== 1 ? 's' : ''}${failedCount > 0 ? ` (${failedCount} failed)` : ''}`,
     });
   } catch (error) {
-    console.error('Error sending emails:', error);
-    return NextResponse.json(
-      { error: 'Failed to send emails' },
-      { status: 500 }
-    );
+    console.error('[send-emails] Fatal:', error);
+    return NextResponse.json({ error: 'Failed to send emails' }, { status: 500 });
   }
 }

@@ -6,11 +6,14 @@ import { sendNewUserWelcomeEmail, sendAdminNewUserNotification } from '@/lib/ema
 import { z } from 'zod';
 
 const createUserSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(1),
-  company: z.string().optional(),
-  plan_tier: z.string().optional().default('FREE'),
-  plan_status: z.string().optional().default('INACTIVE'),
+  email:           z.string().email(),
+  name:            z.string().min(1).optional(),
+  firstName:       z.string().min(1).optional(),
+  lastName:        z.string().min(1).optional(),
+  company:         z.string().optional(),
+  plan_tier:       z.string().optional().default('FREE'),
+  plan_status:     z.string().optional().default('INACTIVE'),
+  activation_code: z.string().max(32).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -18,35 +21,26 @@ export async function GET(request: NextRequest) {
     await requireSession();
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
+    const page  = parseInt(searchParams.get('page')  || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
-    const skip = (page - 1) * limit;
+    const skip  = (page - 1) * limit;
 
-    // Get search/filter parameters
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
-    const tier = searchParams.get('tier') || '';
+    const tier   = searchParams.get('tier')   || '';
 
-    // Build where clause
     const where: any = {};
-    
+
     if (search) {
       where.OR = [
-        { email: { contains: search, mode: 'insensitive' } },
-        { name: { contains: search, mode: 'insensitive' } },
+        { email:   { contains: search, mode: 'insensitive' } },
+        { name:    { contains: search, mode: 'insensitive' } },
         { company: { contains: search, mode: 'insensitive' } },
       ];
     }
+    if (status && status !== 'all') where.plan_status = { equals: status, mode: 'insensitive' };
+    if (tier   && tier   !== 'all') where.plan_tier   = { equals: tier,   mode: 'insensitive' };
 
-    if (status && status !== 'all') {
-      where.plan_status = { equals: status, mode: 'insensitive' };
-    }
-
-    if (tier && tier !== 'all') {
-      where.plan_tier = { equals: tier, mode: 'insensitive' };
-    }
-
-    // Fetch users and total count
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
@@ -68,18 +62,13 @@ export async function GET(request: NextRequest) {
           is_active: true,
           is_suspended: true,
         },
-        orderBy: {
-          created_at: 'desc',
-        },
+        orderBy: { created_at: 'desc' },
       }),
       prisma.user.count({ where }),
     ]);
 
-    // Users returned as-is from database
-    const transformedUsers = users;
-
     return NextResponse.json({
-      users: transformedUsers,
+      users,
       pagination: {
         total,
         page,
@@ -102,14 +91,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession();
-    const body = await request.json();
-    const data = createUserSchema.parse(body);
+    const body    = await request.json();
+    const data    = createUserSchema.parse(body);
 
-    // Check for duplicate email
-    const existing = await prisma.user.findUnique({
-      where: { email: data.email },
-    });
+    // Resolve display name — prefer explicit name, then compose from parts, then email prefix
+    const resolvedName =
+      data.name ||
+      [data.firstName, data.lastName].filter(Boolean).join(' ') ||
+      data.email.split('@')[0];
 
+    // Block duplicate emails
+    const existing = await prisma.user.findUnique({ where: { email: data.email } });
     if (existing) {
       return NextResponse.json(
         { error: 'A user with this email already exists' },
@@ -119,53 +111,58 @@ export async function POST(request: NextRequest) {
 
     const newUser = await prisma.user.create({
       data: {
-        email: data.email,
-        name: data.name,
-        company: data.company,
-        plan_tier: data.plan_tier,
-        plan_status: data.plan_status,
-        is_active: true,
+        email:        data.email,
+        name:         resolvedName,
+        firstName:    data.firstName,
+        lastName:     data.lastName,
+        company:      data.company,
+        plan_tier:    data.plan_tier,
+        plan_status:  data.plan_status,
+        is_active:    true,
         is_suspended: false,
       },
     });
 
+    // Audit log — records admin identity, tier assignment, status, and activation code
     await createAuditLog({
       adminUserId: session.id,
-      action: 'CREATE_USER',
-      entityType: 'User',
-      entityId: newUser.id,
-      changesAfter: newUser,
+      action:      'ADD_USER',
+      entityType:  'User',
+      entityId:    newUser.id,
+      changesAfter: {
+        email:            newUser.email,
+        name:             resolvedName,
+        firstName:        data.firstName        ?? null,
+        lastName:         data.lastName         ?? null,
+        company:          data.company          ?? null,
+        plan_tier:        data.plan_tier,
+        plan_status:      data.plan_status,
+        activation_code:  data.activation_code  ?? null,
+        created_by_admin: session.id,
+      },
     });
 
     // Send welcome email to new user (non-blocking)
     sendNewUserWelcomeEmail(
       newUser.email,
-      newUser.name || 'User',
+      resolvedName,
       newUser.plan_tier || 'free'
-    ).catch(error => {
-      console.error('Failed to send welcome email:', error);
-      // Don't fail the request if email fails
-    });
+    ).catch(err => console.error('Welcome email failed:', err));
 
-    // Send notification to admin (non-blocking)
+    // Notify admin (non-blocking)
     const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL;
     if (adminEmail) {
       sendAdminNewUserNotification(
         adminEmail,
-        newUser.name || 'Unnamed User',
+        resolvedName,
         newUser.email,
         newUser.plan_tier || 'free',
-        newUser.company || undefined
-      ).catch(error => {
-        console.error('Failed to send admin notification:', error);
-        // Don't fail the request if email fails
-      });
+        newUser.company ?? undefined
+      ).catch(err => console.error('Admin notification failed:', err));
     }
 
-    return NextResponse.json(
-      { success: true, user: newUser },
-      { status: 201 }
-    );
+    return NextResponse.json({ success: true, user: newUser }, { status: 201 });
+
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -173,11 +170,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
     console.error('Error creating user:', error);
-    return NextResponse.json(
-      { error: 'Failed to create user' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
   }
 }

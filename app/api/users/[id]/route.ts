@@ -1,3 +1,5 @@
+//app/api/users/[id]/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession, hashPassword } from '@/lib/auth';
 import prisma from '@/lib/prisma';
@@ -201,7 +203,17 @@ export async function DELETE(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    await prisma.user.delete({ where: { id: params.id } });
+    await prisma.user.delete({
+      where: { id: params.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        company: true,
+        plan_tier: true,
+        plan_status: true,
+      },
+    });
 
     try {
       await logUserDeletion(session.id, params.id, user);

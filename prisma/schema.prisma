@@ -3,11 +3,694 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-// ─── Enums ────────────────────────────────────────────────────────────────────
+model AdminUser {
+  id               String     @id @default(uuid())
+  email            String     @unique
+  name             String
+  password         String
+  role             AdminRole
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  resetToken       String?
+  resetTokenExpiry DateTime?  @db.Timestamp(6)
+  auditLogs        AuditLog[]
+
+  @@map("admin_users")
+}
+
+model AuditLog {
+  id            String    @id @default(cuid())
+  adminUserId   String
+  action        String
+  entityType    String
+  entityId      String?
+  changesBefore Json?
+  changesAfter  Json?
+  ipAddress     String?
+  userAgent     String?
+  success       Boolean
+  errorMessage  String?
+  createdAt     DateTime  @default(now())
+  adminUser     AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model User {
+  id                         String                      @id @default(cuid())
+  email                      String                      @unique
+  name                       String?
+  company                    String?
+  plan                       String?
+  account_status             String?
+  plan_status                String?
+  plan_tier                  String?
+  stripe_customer_id         String?                     @unique
+  stripe_subscription_id     String?                     @unique
+  stripe_price_id            String?
+  stripe_current_period_end  DateTime?
+  cancel_at_period_end       Boolean                     @default(false)
+  billing_interval           String?
+  created_at                 DateTime                    @default(now())
+  updated_at                 DateTime                    @updatedAt
+  password_hash              String?
+  last_login_at              DateTime?
+  is_active                  Boolean?
+  is_suspended               Boolean?
+  first_name                 String?
+  last_name                  String?
+  trial_active               Boolean?
+  trial_started_at           DateTime?
+  trial_expires_at           DateTime?
+  subscription_tier          String?
+  subscription_status        String?
+  role                       String?
+  trial_ends_at              DateTime?
+  subscription_plan          String?
+  address_line1              String?
+  address_line2              String?
+  city                       String?
+  country                    String?
+  current_period_end         DateTime?
+  image                      String?
+  phone                      String?
+  phone_verified             Boolean?
+  plan_interval              String?
+  postal_code                String?
+  state                      String?
+  subscriptions              Json?
+  title                      String?
+  email_verified             DateTime?                   @db.Timestamp(6)
+  two_factor_secret          String?
+  two_factor_enabled         Boolean?                    @default(false)
+  email_notifications        Boolean?                    @default(true)
+  notification_frequency     String?                     @default("daily")
+  last_notification_sent_at  DateTime?
+  auto_login_user_id         String?                     @unique
+  password                   String?
+  firstName                  String?
+  lastName                   String?
+  email_verification_token   String?                     @unique
+  email_verification_expires DateTime?                   @db.Timestamp(6)
+  accounts                   accounts[]
+  alert_exports              alert_exports[]
+  alert_subscriptions        alert_subscriptions[]
+  auto_login_tokens          auto_login_tokens[]
+  email_verification_tokens  email_verification_tokens[]
+  recipient_contacts         recipient_contacts[]
+  saved_searches             saved_searches[]
+  saved_searches_new         saved_searches_new[]
+  saved_searches_v2          saved_searches_v2[]
+  search_alerts              search_alerts[]
+  search_exports             search_exports[]
+  searches                   searches[]
+  sessions                   sessions[]
+  two_factor_backup_codes    two_factor_backup_codes[]
+
+  @@index([email])
+  @@index([stripe_customer_id])
+  @@index([plan_status])
+  @@index([plan_tier])
+  @@map("users")
+}
+
+model Contractor {
+  id                String        @id
+  uei_number        String?       @unique
+  name              String?
+  email             String?
+  sam_gov_id        String?
+  cage_code         String?
+  naics_code        String?
+  state             String?
+  business_type     String?
+  registration_date DateTime?     @db.Date
+  contacted         Boolean?      @default(false)
+  enrolled          Boolean?      @default(false)
+  contact_attempts  Int?          @default(0)
+  offer_code        String?
+  last_contact      DateTime?     @db.Date
+  notes             String?
+  priority          String?       @default("Medium")
+  score             Int?
+  created_at        DateTime?     @default(now()) @db.Timestamptz(6)
+  synced_at         DateTime?     @db.Timestamptz(6)
+  pipeline_stage    String?       @default("new")
+  trial_start       DateTime?     @db.Timestamp(6)
+  trial_end         DateTime?     @db.Timestamp(6)
+  revenue           Decimal?      @default(0) @db.Decimal
+  crm_activities    CrmActivity[]
+  crm_tasks         CrmTask[]
+  email_logs        EmailLog[]
+
+  @@map("contractors")
+}
+
+model EmailLog {
+  id            String     @id @default(dbgenerated("(gen_random_uuid())::text"))
+  contractor_id String
+  subject       String
+  body          String
+  offer_code    String?
+  campaign_type String?    @default("initial")
+  status        String?    @default("sent")
+  resend_id     String?
+  sent_at       DateTime?  @default(now()) @db.Timestamptz(6)
+  contractor    Contractor @relation(fields: [contractor_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([contractor_id], map: "idx_email_logs_contractor")
+  @@index([sent_at], map: "idx_email_logs_sent")
+  @@map("email_logs")
+}
+
+model SyncLog {
+  id                 String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  contractors_synced Int       @default(0)
+  new_contractors    Int       @default(0)
+  total_available    Int       @default(0)
+  date_range_from    DateTime  @db.Timestamptz(6)
+  date_range_to      DateTime  @db.Timestamptz(6)
+  status             String?   @default("success")
+  error              String?
+  duration_ms        Int?
+  created_at         DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@map("sync_logs")
+}
+
+model OfferCode {
+  id             String        @id @default(dbgenerated("(gen_random_uuid())::text"))
+  code           String        @unique
+  description    String
+  discount       String
+  type           String        @default("trial")
+  usage_count    Int           @default(0)
+  max_usage      Int?
+  expires_at     DateTime?     @db.Date
+  active         Boolean       @default(true)
+  created_at     DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime      @default(now()) @updatedAt @db.Timestamptz(6)
+  crm_activities CrmActivity[]
+
+  @@index([active], map: "idx_offer_codes_active")
+  @@index([code], map: "idx_offer_codes_code")
+  @@map("offer_codes")
+}
+
+model EmailTemplate {
+  id           String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  name         String
+  subject      String
+  body         String
+  category     String    @default("cold")
+  offer_code   String?
+  tags         String[]  @default([])
+  ai_generated Boolean?  @default(false)
+  usage_count  Int?      @default(0)
+  active       Boolean?  @default(true)
+  created_by   String?
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([active], map: "idx_email_templates_active")
+  @@index([category], map: "idx_email_templates_category")
+  @@index([created_at], map: "idx_email_templates_created_at")
+  @@map("email_templates")
+}
+
+model CrmActivity {
+  id            String     @id @default(dbgenerated("(gen_random_uuid())::text"))
+  contractor_id String
+  offer_code_id String?
+  type          String
+  description   String
+  metadata      Json?
+  created_by    String?
+  created_at    DateTime   @default(now()) @db.Timestamptz(6)
+  contractor    Contractor @relation(fields: [contractor_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  offer_code    OfferCode? @relation(fields: [offer_code_id], references: [id], onUpdate: NoAction)
+
+  @@index([contractor_id], map: "idx_crm_activities_contractor")
+  @@index([created_at], map: "idx_crm_activities_created")
+  @@index([type], map: "idx_crm_activities_type")
+  @@map("crm_activities")
+}
+
+model CrmTask {
+  id              String     @id @default(dbgenerated("(gen_random_uuid())::text"))
+  contractor_id   String
+  contractor_name String
+  title           String
+  due_date        DateTime   @db.Date
+  priority        String     @default("medium")
+  status          String     @default("pending")
+  assignee        String?
+  notes           String?
+  created_at      DateTime   @default(now()) @db.Timestamptz(6)
+  completed_at    DateTime?  @db.Timestamptz(6)
+  contractor      Contractor @relation(fields: [contractor_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([contractor_id], map: "idx_crm_tasks_contractor")
+  @@index([due_date], map: "idx_crm_tasks_due")
+  @@index([status], map: "idx_crm_tasks_status")
+  @@map("crm_tasks")
+}
+
+model AutoLoginToken {
+  id        String    @id
+  token     String    @unique
+  email     String
+  expires   DateTime
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?
+
+  @@index([email])
+  @@index([token])
+}
+
+model prisma_migrations_backup_20260218 {
+  id                  String    @id(map: "_prisma_migrations_pkey") @db.VarChar(36)
+  checksum            String    @db.VarChar(64)
+  finished_at         DateTime? @db.Timestamptz(6)
+  migration_name      String    @db.VarChar(255)
+  logs                String?
+  rolled_back_at      DateTime? @db.Timestamptz(6)
+  started_at          DateTime  @default(now()) @db.Timestamptz(6)
+  applied_steps_count Int       @default(0)
+
+  @@map("_prisma_migrations_backup_20260218")
+}
+
+model accounts {
+  id                  String  @id
+  user_id             String
+  type                String
+  provider            String
+  provider_account_id String
+  refresh_token       String?
+  access_token        String?
+  expires_at          Int?
+  token_type          String?
+  scope               String?
+  id_token            String?
+  session_state       String?
+  users               User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([provider, provider_account_id])
+}
+
+model alert_exports {
+  id            String        @id
+  alert_id      String
+  user_id       String
+  format        ExportFormat  @default(CSV)
+  status        ExportStatus  @default(COMPLETED)
+  file_url      String?
+  file_name     String
+  file_size     Int?
+  record_count  Int
+  downloaded_at DateTime?
+  expires_at    DateTime?
+  created_at    DateTime      @default(now())
+  search_alerts search_alerts @relation(fields: [alert_id], references: [id], onDelete: Cascade)
+  users         User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([alert_id])
+  @@index([created_at])
+  @@index([user_id])
+}
+
+model alert_runs {
+  id                String         @id
+  alert_id          String
+  status            AlertRunStatus @default(SUCCESS)
+  result_count      Int
+  new_results_count Int?
+  error_message     String?
+  ran_at            DateTime       @default(now())
+  search_params     Json?
+  results_snapshot  Json?
+  search_alerts     search_alerts  @relation(fields: [alert_id], references: [id], onDelete: Cascade)
+
+  @@index([alert_id])
+  @@index([ran_at])
+}
+
+model alert_subscriptions {
+  id                      String              @id
+  created_at              DateTime            @default(now())
+  updated_at              DateTime
+  user_id                 String
+  saved_search_id         String
+  name                    String
+  description             String?
+  recipients              String
+  email_notification      Boolean             @default(true)
+  send_empty_results      Boolean             @default(false)
+  frequency               AlertFrequency      @default(DAILY)
+  delivery_time           String?
+  export_format           String              @default("csv")
+  include_links           Boolean             @default(false)
+  include_attachments     Boolean             @default(true)
+  include_results_in_body Boolean             @default(true)
+  max_results             Int                 @default(100)
+  active                  Boolean             @default(true)
+  last_run_at             DateTime?
+  last_result_count       Int?
+  last_error              String?
+  saved_searches_v2       saved_searches_v2   @relation(fields: [saved_search_id], references: [id], onDelete: Cascade)
+  users                   User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subscription_runs       subscription_runs[]
+
+  @@index([saved_search_id])
+  @@index([user_id, active])
+  @@index([user_id])
+}
+
+model auto_login_tokens {
+  id         String    @id
+  user_id    String
+  token_hash String    @unique
+  expires_at DateTime  @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  used_at    DateTime? @db.Timestamptz(6)
+  users      User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([expires_at], map: "idx_auto_login_tokens_expires_at")
+  @@index([token_hash], map: "idx_auto_login_tokens_token_hash")
+  @@index([user_id], map: "idx_auto_login_tokens_user_id")
+}
+
+model email_verification_tokens {
+  id         String   @id
+  user_id    String
+  token_hash String   @unique
+  expires_at DateTime
+  created_at DateTime @default(now())
+  users      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([token_hash])
+  @@index([user_id])
+}
+
+model opportunity_daily_stats {
+  id           String   @id
+  day          DateTime @unique @db.Date
+  total        Int      @default(0)
+  by_state     Json?
+  by_dept      Json?
+  by_set_aside Json?
+  created_at   DateTime @default(now())
+}
+
+model password_reset_tokens {
+  id         String    @id
+  email      String
+  token_hash String    @unique
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+}
+
+model recipient_contacts {
+  id           String    @id
+  user_id      String
+  email        String
+  name         String?
+  organization String?
+  notes        String?
+  use_count    Int       @default(0)
+  last_used_at DateTime?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime
+  users        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, email])
+  @@index([user_id, email])
+  @@index([user_id])
+}
+
+model sam_cached_searches {
+  id                 String   @id
+  search_key         String   @unique
+  opportunities_data Json
+  total_records      Int
+  cached_at          DateTime
+  expires_at         DateTime
+
+  @@index([expires_at])
+  @@index([search_key])
+}
+
+model saved_search_runs {
+  id              String         @id
+  saved_search_id String
+  ran_at          DateTime       @default(now())
+  result_count    Int            @default(0)
+  status          String         @default("success")
+  error_message   String?
+  payload         Json?
+  saved_searches  saved_searches @relation(fields: [saved_search_id], references: [id], onDelete: Cascade)
+
+  @@index([ran_at])
+  @@index([saved_search_id])
+}
+
+model saved_searches {
+  id                String              @id
+  user_id           String
+  name              String
+  description       String?
+  filters           Json
+  frequency         String              @default("none")
+  active            Boolean             @default(true)
+  last_run_at       DateTime?
+  day_of_week       Int?
+  time_of_day       String?
+  timezone          String?
+  delivery_email    String?
+  deliver_email     Boolean             @default(true)
+  deliver_csv       Boolean             @default(false)
+  deliver_pdf       Boolean             @default(false)
+  deliver_json      Boolean             @default(false)
+  next_run_at       DateTime?
+  created_at        DateTime            @default(now())
+  updated_at        DateTime
+  saved_search_runs saved_search_runs[]
+  users             User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([created_at])
+  @@index([user_id])
+}
+
+model saved_searches_new {
+  id                       String           @id
+  user_id                  String
+  name                     String
+  description              String?
+  is_pinned                Boolean          @default(false)
+  keywords                 String?
+  naics                    String?
+  agency                   String?
+  set_aside                String?
+  state_of_performance     String?
+  procurement_type         String           @default("o")
+  is_active                String?
+  posted_after             DateTime?
+  posted_before            DateTime?
+  rdl_from                 DateTime?
+  rdl_to                   DateTime?
+  solicitation_number      String?
+  notice_id                String?
+  classification_code      String?
+  organization_code        String?
+  place_of_performance_zip String?
+  opportunity_status       String?
+  subscription_enabled     Boolean          @default(false)
+  frequency                AlertFrequency?
+  email_notification       Boolean          @default(false)
+  send_empty_results       Boolean          @default(false)
+  max_results              Int              @default(100)
+  recipients               String?
+  delivery_time            String?
+  export_format            String           @default("XLSB")
+  include_links            Boolean          @default(true)
+  last_run_at              DateTime?
+  last_result_count        Int?
+  created_at               DateTime         @default(now())
+  updated_at               DateTime
+  isPaused                 Boolean          @default(false)
+  pausedUntil              DateTime?
+  pausedAt                 DateTime?
+  lastRunAt                DateTime?
+  lastRunStatus            String?
+  lastRunCount             Int?
+  totalRuns                Int              @default(0)
+  totalEmailsSent          Int              @default(0)
+  users                    User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  search_exports           search_exports[]
+  search_runs              search_runs[]
+
+  @@index([user_id])
+  @@index([user_id, subscription_enabled])
+  @@index([user_id, updated_at])
+}
+
+model saved_searches_v2 {
+  id                   String                @id
+  created_at           DateTime              @default(now())
+  updated_at           DateTime
+  user_id              String
+  name                 String
+  description          String?
+  keywords             String?
+  naics                String?
+  agency               String?
+  set_aside            String?
+  state_of_performance String?
+  posted_after         String?
+  posted_before        String?
+  procurement_type     String?               @default("o")
+  last_used_at         DateTime?
+  use_count            Int                   @default(0)
+  alert_subscriptions  alert_subscriptions[]
+  users                User                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([user_id, updated_at])
+}
+
+model search_alerts {
+  id                 String          @id
+  user_id            String
+  name               String
+  description        String?
+  keywords           String?
+  naics              String?
+  agency             String?
+  setAside           String?
+  stateOfPerformance String?
+  posted_after       DateTime?
+  posted_before      DateTime?
+  procurement_type   String?         @default("o")
+  frequency          AlertFrequency  @default(DAILY)
+  email_notification Boolean         @default(true)
+  send_empty_results Boolean         @default(false)
+  max_results        Int?            @default(100)
+  active             Boolean         @default(true)
+  last_run_at        DateTime?
+  last_result_count  Int?
+  last_error         String?
+  created_at         DateTime        @default(now())
+  updated_at         DateTime
+  alert_exports      alert_exports[]
+  alert_runs         alert_runs[]
+  users              User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([active])
+  @@index([created_at])
+  @@index([user_id])
+}
+
+model search_exports {
+  id                 String             @id
+  saved_search_id    String
+  user_id            String
+  format             ExportFormat
+  file_name          String
+  file_size          Int
+  record_count       Int
+  file_url           String?
+  expires_at         DateTime
+  created_at         DateTime           @default(now())
+  saved_searches_new saved_searches_new @relation(fields: [saved_search_id], references: [id], onDelete: Cascade)
+  users              User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([saved_search_id])
+  @@index([user_id])
+}
+
+model search_runs {
+  id                 String             @id
+  saved_search_id    String
+  status             RunStatus          @default(SUCCESS)
+  result_count       Int                @default(0)
+  new_results_count  Int                @default(0)
+  search_params      Json
+  results_snapshot   Json
+  error_message      String?
+  email_sent         Boolean            @default(false)
+  created_at         DateTime           @default(now())
+  saved_searches_new saved_searches_new @relation(fields: [saved_search_id], references: [id], onDelete: Cascade)
+
+  @@index([saved_search_id, created_at])
+  @@index([saved_search_id])
+}
+
+model searches {
+  id         String   @id
+  user_id    String
+  query      String
+  results    Json?
+  created_at DateTime @default(now())
+  users      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([created_at])
+  @@index([user_id])
+}
+
+model sessions {
+  id            String   @id
+  session_token String   @unique
+  user_id       String
+  expires       DateTime
+  users         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model subscription_runs {
+  id                  String              @id
+  created_at          DateTime            @default(now())
+  subscription_id     String
+  status              AlertRunStatus      @default(SUCCESS)
+  result_count        Int                 @default(0)
+  new_results_count   Int                 @default(0)
+  search_params       Json?
+  results_snapshot    Json?
+  error_message       String?
+  alert_subscriptions alert_subscriptions @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
+
+  @@index([created_at])
+  @@index([subscription_id])
+}
+
+model two_factor_backup_codes {
+  id         String    @id
+  user_id    String
+  code       String
+  used       Boolean   @default(false)
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+  users      User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([code])
+  @@index([user_id])
+}
+
+model verification_tokens {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
 
 enum AdminRole {
   SUPER_ADMIN
@@ -31,259 +714,36 @@ enum PlanTier {
   ENTERPRISE
 }
 
-// ─── Admin ────────────────────────────────────────────────────────────────────
-
-model AdminUser {
-  id               String    @id @default(uuid())
-  email            String    @unique
-  name             String
-  password         String
-  role             AdminRole
-  resetToken       String?   // Add this
-  resetTokenExpiry DateTime? // Add this
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  auditLogs        AuditLog[]
-
-  @@map("admin_users")
+enum AlertFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  AS_CHANGES
+  MANUAL
 }
 
-model AuditLog {
-  id            String    @id @default(cuid())
-  adminUserId   String
-  action        String
-  entityType    String
-  entityId      String?
-  changesBefore Json?
-  changesAfter  Json?
-  ipAddress     String?
-  userAgent     String?
-  success       Boolean   @default(true)
-  errorMessage  String?
-  createdAt     DateTime  @default(now())
-  adminUser     AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
-
-  @@index([adminUserId])
-  @@index([action])
-  @@index([entityType])
-  @@index([createdAt])
-  @@map("audit_logs")
+enum AlertRunStatus {
+  SUCCESS
+  ERROR
+  NO_RESULTS
 }
 
-// ─── Users ────────────────────────────────────────────────────────────────────
-
-model User {
-  id                         String    @id @default(cuid())
-  email                      String    @unique
-  name                       String?
-  firstName                  String?
-  lastName                   String?
-  company                    String?
-  phone                      String?
-  plan                       String?
-  plan_status                String?
-  plan_tier                  String?
-  stripe_customer_id         String?   @unique
-  stripe_subscription_id     String?   @unique
-  created_at                 DateTime  @default(now())
-  updated_at                 DateTime  @updatedAt
-  password                   String?
-  last_login_at              DateTime?
-  is_active                  Boolean?  @default(true)
-  is_suspended               Boolean?  @default(false)
-  email_verified             DateTime?
-  email_verification_token   String?   @unique
-  email_verification_expires DateTime?
-
-  @@index([email])
-  @@index([stripe_customer_id])
-  @@index([plan_status])
-  @@index([plan_tier])
-  @@index([email_verified])
-  @@map("users")
+enum ExportFormat {
+  CSV
+  JSON
+  EXCEL
+  PDF
 }
 
-// ─── SAM.gov Contractors (existing table — raw SQL created) ───────────────────
-
-model Contractor {
-  id                String    @id
-  uei_number        String    @unique
-  name              String
-  email             String    @default("")
-  sam_gov_id        String?
-  cage_code         String?
-  naics_code        String?
-  state             String?
-  business_type     String?
-  registration_date DateTime? @db.Date
-  contacted         Boolean   @default(false)
-  enrolled          Boolean   @default(false)
-  contact_attempts  Int       @default(0)
-  offer_code        String?
-  last_contact      DateTime? @db.Date
-  notes             String?
-  priority          String?
-  score             Int?
-  created_at        DateTime  @default(now()) @db.Timestamptz
-  synced_at         DateTime? @db.Timestamptz
-
-  // CRM columns (added via migration SQL below)
-  pipeline_stage    String?   // new | contacted | opened | responded | demo | trial | converted | churned | unsubscribed
-  trial_start       DateTime? @db.Date
-  trial_end         DateTime? @db.Date
-  revenue           Decimal?  @db.Decimal(10, 2)
-
-  // Relations
-  email_logs        EmailLog[]
-  crm_activities    CrmActivity[]
-  crm_tasks         CrmTask[]
-
-  @@index([state])
-  @@index([naics_code])
-  @@index([contacted])
-  @@index([enrolled])
-  @@index([pipeline_stage])
-  @@map("contractors")
+enum ExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
 }
 
-// ─── Email Logs (existing table) ──────────────────────────────────────────────
-
-model EmailLog {
-  id            String    @id @default(cuid())
-  contractor_id String
-  subject       String?
-  body          String?
-  offer_code    String?
-  campaign_type String?
-  status        String?
-  resend_id     String?
-  sent_at       DateTime  @default(now()) @db.Timestamptz
-
-  contractor    Contractor @relation(fields: [contractor_id], references: [id], onDelete: Cascade)
-
-  @@index([contractor_id])
-  @@index([sent_at])
-  @@index([status])
-  @@map("email_logs")
+enum RunStatus {
+  SUCCESS
+  ERROR
 }
-
-// ─── Sync Logs (existing table) ───────────────────────────────────────────────
-
-model SyncLog {
-  id                  String    @id @default(cuid())
-  contractors_synced  Int       @default(0)
-  new_contractors     Int       @default(0)
-  total_available     Int       @default(0)
-  date_range_from     DateTime?
-  date_range_to       DateTime?
-  status              String    @default("success")
-  error               String?
-  duration_ms         Int?
-  created_at          DateTime  @default(now()) @db.Timestamptz
-
-  @@index([created_at])
-  @@index([status])
-  @@map("sync_logs")
-}
-
-// ─── CRM — Offer Codes (new table) ───────────────────────────────────────────
-
-model OfferCode {
-  id          String    @id @default(cuid())
-  code        String    @unique
-  description String
-  discount    String
-  type        String    @default("trial") // trial | discount | feature
-  usage_count Int       @default(0)
-  max_usage   Int?
-  expires_at  DateTime? @db.Date
-  active      Boolean   @default(true)
-  created_at  DateTime  @default(now()) @db.Timestamptz
-  updated_at  DateTime  @updatedAt @db.Timestamptz
-
-  // Relations
-  crm_activities CrmActivity[]
-
-  @@index([code])
-  @@index([active])
-  @@map("offer_codes")
-}
-
-// ─── Add this model to prisma/schema.prisma ──────────────────────────────────
-
-model EmailTemplate {
-  id           String   @id @default(cuid())
-  name         String
-  subject      String
-  body         String
-  category     String   @default("cold") // cold | followup | opportunity | onboarding
-  offer_code   String?
-  tags         String[] @default([])
-  ai_generated Boolean  @default(false)
-  usage_count  Int      @default(0)
-  active       Boolean  @default(true)
-  created_by   String?
-  created_at   DateTime @default(now()) @db.Timestamptz
-  updated_at   DateTime @updatedAt @db.Timestamptz
-
-  @@index([category])
-  @@index([active])
-  @@index([created_at])
-  @@map("email_templates")
-}
-
-
-// ─── CRM — Activity Log (new table) ──────────────────────────────────────────
-
-model CrmActivity {
-  id              String     @id @default(cuid())
-  contractor_id   String
-  offer_code_id   String?
-  type            String     // email_sent | email_opened | email_replied | call_made | call_missed | note_added | stage_changed | code_redeemed | signed_up | unsubscribed | task_completed | follow_up_scheduled
-  description     String
-  metadata        Json?
-  created_by      String?    // admin user id or "system"
-  created_at      DateTime   @default(now()) @db.Timestamptz
-
-  contractor      Contractor  @relation(fields: [contractor_id], references: [id], onDelete: Cascade)
-  offer_code      OfferCode?  @relation(fields: [offer_code_id], references: [id], onDelete: SetNull)
-
-  @@index([contractor_id])
-  @@index([type])
-  @@index([created_at])
-  @@map("crm_activities")
-}
-
-// ─── CRM — Tasks (new table) ─────────────────────────────────────────────────
-
-model CrmTask {
-  id              String    @id @default(cuid())
-  contractor_id   String
-  contractor_name String
-  title           String
-  due_date        DateTime  @db.Date
-  priority        String    @default("medium") // high | medium | low
-  status          String    @default("pending") // pending | done | overdue
-  assignee        String?
-  notes           String?
-  created_at      DateTime  @default(now()) @db.Timestamptz
-  completed_at    DateTime? @db.Timestamptz
-
-  contractor      Contractor @relation(fields: [contractor_id], references: [id], onDelete: Cascade)
-
-  @@index([contractor_id])
-  @@index([status])
-  @@index([due_date])
-  @@index([priority])
-  @@map("crm_tasks")
-}
-
-// ─── Existing tables we don't touch but need to acknowledge ──────────────────
-// accounts, sessions, verification_tokens, email_verification_tokens,
-// password_reset_tokens, auto_login_tokens, AutoLoginToken,
-// saved_searches, saved_searches_new, saved_searches_v2,
-// saved_search_runs, search_alerts, alert_subscriptions, alert_runs,
-// alert_exports, search_exports, search_runs, searches,
-// sam_cached_searches, opportunity_daily_stats, subscription_runs,
-// recipient_contacts, two_factor_backup_codes
-// These are managed by other parts of the app — left unmapped intentionally.

@@ -239,6 +239,16 @@ export default function OutreachPage() {
   const [filterView,    setFilterView]    = useState<FilterView>('total');
   const [pipeView,      setPipeView]      = useState<'kanban' | 'list'>('kanban');
 
+  // ── CRM table state ───────────────────────────────────────────────────────────
+  type PipeSortKey = 'name'|'state'|'naics_code'|'score'|'pipeline_stage'|'registration_date'|'trial_end';
+  const [sortKey,      setSortKey]      = useState<PipeSortKey>('score');
+  const [sortDir,      setSortDir]      = useState<'asc'|'desc'>('desc');
+  const [stageFilter,  setStageFilter]  = useState<PipelineStage | 'all'>('all');
+  const [crmSelected,  setCrmSelected]  = useState<Set<string>>(new Set<string>());
+  const [showCampaign, setShowCampaign] = useState(false);
+  const [campaignTpl,  setCampaignTpl]  = useState<EmailTemplate | null>(null);
+  const [trialEdits,   setTrialEdits]   = useState<Record<string, { start: string; end: string }>>({});
+
   // ── Data state ───────────────────────────────────────────────────────────────
   const [contractors,   setContractors]   = useState<Contractor[]>([]);
   const [pipeline,      setPipeline]      = useState<Contractor[]>([]);
@@ -795,258 +805,355 @@ export default function OutreachPage() {
               ))}
             </div>
 
-            {/* Pipeline + Sidebar */}
-            <div className="grid grid-cols-4 gap-6">
+            {/* Pipeline — Full-width data table */}
+            {(() => {
+              const sortedPipeline = [...pipeline]
+                .filter(c => !crmSearch || c.name.toLowerCase().includes(crmSearch.toLowerCase()) || (c.naics_code || '').includes(crmSearch) || (c.state || '').toLowerCase().includes(crmSearch.toLowerCase()))
+                .filter(c => stageFilter === 'all' || (c.pipeline_stage || 'new') === stageFilter)
+                .sort((a, b) => {
+                  let av: any = a[sortKey as keyof Contractor] ?? '';
+                  let bv: any = b[sortKey as keyof Contractor] ?? '';
+                  if (sortKey === 'score') { av = Number(av); bv = Number(bv); }
+                  const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+                  return sortDir === 'asc' ? cmp : -cmp;
+                });
 
-              {/* Pipeline Board */}
-              <div className="col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                  <div>
-                    <h2 className="font-black text-slate-900">Sales Pipeline</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">{pipeline.length} leads · {(Object.keys(STAGES) as PipelineStage[]).filter(s => (funnel[s] || 0) > 0).length} active stages</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        value={crmSearch}
-                        onChange={e => setCrmSearch(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && fetchPipeline()}
-                        placeholder="Search leads..."
-                        className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none w-36"
-                      />
-                    </div>
-                    <div className="flex border border-slate-200 rounded-lg overflow-hidden">
-                      <button onClick={() => setPipeView('kanban')} className={`px-3 py-1.5 text-xs font-bold ${pipeView === 'kanban' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>Kanban</button>
-                      <button onClick={() => setPipeView('list')}   className={`px-3 py-1.5 text-xs font-bold ${pipeView === 'list'   ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>List</button>
-                    </div>
-                  </div>
-                </div>
+              const toggleSort = (k: PipeSortKey) => {
+                if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                else { setSortKey(k); setSortDir('desc'); }
+              };
 
-                {crmLoading ? (
-                  <div className="flex items-center justify-center py-20 text-slate-400">
-                    <Loader2 className="w-6 h-6 animate-spin mr-2" />Loading pipeline...
-                  </div>
-                ) : pipeView === 'kanban' ? (
-                  <div className="overflow-x-auto">
-                    <div className="flex gap-3 p-4 min-w-max">
-                      {(Object.keys(STAGES) as PipelineStage[]).filter(s => s !== 'unsubscribed').map(stage => {
-                        const sc = STAGES[stage]; const SI = sc.icon; const list = pipeByStage[stage];
-                        return (
-                          <div key={stage} className="w-44 flex-shrink-0">
-                            <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl mb-2 ${sc.bg}`}>
-                              <SI className={`w-3.5 h-3.5 ${sc.color}`} />
-                              <span className={`text-xs font-black ${sc.color}`}>{sc.label}</span>
-                              <span className={`ml-auto text-xs font-black ${sc.color} opacity-60`}>{list.length}</span>
-                            </div>
-                            <div className="space-y-2 min-h-12">
-                              {list.map(c => (
-                                <div
-                                  key={c.id}
-                                  className="bg-white border border-slate-200 rounded-xl p-3 cursor-pointer hover:shadow-md hover:border-slate-300 transition"
-                                  onClick={() => openDrawer(c)}
-                                >
-                                  <div className="flex items-start justify-between gap-1">
-                                    <p className="font-bold text-xs text-slate-900 leading-tight">{c.name}</p>
-                                    {c.score != null && (
-                                      <span className={`text-xs font-black px-1.5 py-0.5 rounded-md flex-shrink-0 ${scoreBg(c.score)} ${scoreClr(c.score)}`}>{c.score}</span>
+              const allSelected = crmSelected.size === sortedPipeline.length && sortedPipeline.length > 0;
+              const toggleAll   = () => setCrmSelected(allSelected ? new Set() : new Set(sortedPipeline.map(c => c.id)));
+
+              const SortIcon = ({ k }: { k: PipeSortKey }) => sortKey !== k ? null : (
+                <span className="ml-0.5 text-orange-400">{sortDir === 'asc' ? '↑' : '↓'}</span>
+              );
+
+              const Th = ({ k, label, cls = '' }: { k: PipeSortKey; label: string; cls?: string }) => (
+                <th className={`px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-800 select-none ${cls}`} onClick={() => toggleSort(k)}>
+                  {label}<SortIcon k={k} />
+                </th>
+              );
+
+              const saveTrialDates = async (id: string) => {
+                const t = trialEdits[id];
+                if (!t) return;
+                await fetch('/api/crm/pipeline', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id, trial_start: t.start, trial_end: t.end, pipeline_stage: 'trial' }),
+                });
+                setPipeline(p => p.map(c => c.id === id ? { ...c, trial_start: t.start, trial_end: t.end, pipeline_stage: 'trial' } : c));
+                setTrialEdits(prev => { const n = { ...prev }; delete n[id]; return n; });
+                notify('Trial dates saved');
+              };
+
+              return (
+                <div className="space-y-4">
+                  {/* Pipeline table card */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    {/* Toolbar */}
+                    <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-3 flex-wrap">
+                      <div>
+                        <h2 className="font-black text-slate-900 text-sm">Sales Pipeline</h2>
+                        <p className="text-xs text-slate-400">{sortedPipeline.length} of {pipeline.length} leads</p>
+                      </div>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <input value={crmSearch} onChange={e => setCrmSearch(e.target.value)} placeholder="Search name, state, NAICS..." className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none w-44" />
+                      </div>
+                      {/* Stage filter pills */}
+                      <div className="flex gap-1 flex-wrap items-center">
+                        <button onClick={() => setStageFilter('all')} className={`text-xs px-2.5 py-1 rounded-lg font-bold transition ${stageFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>All</button>
+                        {(Object.keys(STAGES) as PipelineStage[]).map(s => {
+                          const sc = STAGES[s]; const SI = sc.icon; const cnt = funnel[s] || 0; if (!cnt && stageFilter !== s) return null;
+                          return (
+                            <button key={s} onClick={() => setStageFilter(stageFilter === s ? 'all' : s)} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg font-bold transition ${stageFilter === s ? `${sc.bg} ${sc.color} border ${sc.border}` : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                              <SI className="w-3 h-3" />{sc.label} <span className="opacity-60">{cnt}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="ml-auto flex items-center gap-2">
+                        {crmSelected.size > 0 && (
+                          <button onClick={() => setShowCampaign(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg text-xs font-bold hover:from-orange-600 hover:to-orange-700 transition shadow-sm">
+                            <Mail className="w-3.5 h-3.5" />{crmSelected.size} Selected — Send Campaign
+                          </button>
+                        )}
+                        <button onClick={fetchPipeline} className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition">
+                          <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Table */}
+                    {crmLoading ? (
+                      <div className="flex items-center justify-center py-16 text-slate-400"><Loader2 className="w-5 h-5 animate-spin mr-2" />Loading pipeline...</div>
+                    ) : (
+                      <div className="overflow-auto max-h-[600px]">
+                        <table className="w-full min-w-[960px]">
+                          <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
+                            <tr>
+                              <th className="px-3 py-3 w-8 bg-slate-50">
+                                <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer" />
+                              </th>
+                              <Th k="name"              label="Company"     cls="min-w-[200px] bg-slate-50" />
+                              <Th k="state"             label="State"       cls="w-16 bg-slate-50" />
+                              <Th k="naics_code"        label="NAICS"       cls="w-24 bg-slate-50" />
+                              <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-36 bg-slate-50">Set-Aside</th>
+                              <Th k="registration_date" label="Reg. Date"   cls="w-28 bg-slate-50" />
+                              <Th k="pipeline_stage"    label="Stage"       cls="w-32 bg-slate-50" />
+                              <Th k="trial_end"         label="Trial"       cls="w-52 bg-slate-50" />
+                              <Th k="score"             label="Score"       cls="w-16 bg-slate-50" />
+                              <th className="px-3 py-3 w-10 bg-slate-50"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {sortedPipeline.map(c => {
+                              const sc  = STAGES[c.pipeline_stage || 'new'];
+                              const SI  = sc.icon;
+                              const sel = crmSelected.has(c.id);
+                              const te  = trialEdits[c.id];
+                              const isTrial = (c.pipeline_stage || 'new') === 'trial';
+                              const trialDaysLeft = c.trial_end ? Math.ceil((new Date(c.trial_end).getTime() - Date.now()) / 86400000) : null;
+                              return (
+                                <tr key={c.id} className={`group hover:bg-slate-50/80 transition ${sel ? 'bg-blue-50/40' : ''}`}>
+                                  <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                                    <input type="checkbox" checked={sel} onChange={() => {
+                                      const s = new Set<string>(crmSelected);
+                                      sel ? s.delete(c.id) : s.add(c.id);
+                                      setCrmSelected(s);
+                                    }} className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer" />
+                                  </td>
+                                  <td className="px-3 py-2.5 cursor-pointer" onClick={() => openDrawer(c)}>
+                                    <p className="font-bold text-xs text-slate-900 leading-tight truncate max-w-[200px]">{c.name}</p>
+                                    <p className="text-xs text-slate-400 truncate max-w-[200px]">{c.email}</p>
+                                    {c.business_type && c.business_type !== 'Small Business' && (
+                                      <span className={`text-xs px-1.5 py-0.5 rounded font-semibold mt-0.5 inline-block ${bizBadge(c.business_type)}`}>{c.business_type}</span>
                                     )}
-                                  </div>
-                                  <p className="text-xs text-slate-400 mt-1">{c.state} · {c.naics_code}</p>
-                                  {c.pipeline_stage === 'trial' && c.trial_end && (
-                                    <p className="text-xs text-orange-600 font-semibold mt-1">Ends {c.trial_end.slice(0, 10)}</p>
-                                  )}
-                                  <select
-                                    value={c.pipeline_stage || 'new'}
-                                    onChange={e => { e.stopPropagation(); stageChange(c.id, e.target.value as PipelineStage); }}
-                                    onClick={e => e.stopPropagation()}
-                                    className="mt-2 w-full text-xs border border-slate-200 rounded-lg px-1.5 py-0.5 bg-white text-slate-600 font-semibold focus:outline-none cursor-pointer"
-                                  >
-                                    {(Object.keys(STAGES) as PipelineStage[]).map(s => (
-                                      <option key={s} value={s}>{STAGES[s].label}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-100 max-h-[460px] overflow-y-auto">
-                    {pipeline.filter(c => !crmSearch || c.name.toLowerCase().includes(crmSearch.toLowerCase())).map(c => {
-                      const sc = STAGES[c.pipeline_stage || 'new']; const SI = sc.icon;
-                      return (
-                        <div
-                          key={c.id}
-                          className="px-5 py-3.5 flex items-center gap-4 hover:bg-slate-50 cursor-pointer transition"
-                          onClick={() => openDrawer(c)}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="font-bold text-sm text-slate-900">{c.name}</p>
-                              {c.business_type && c.business_type !== 'Small Business' && (
-                                <span className={`text-xs px-2 py-0.5 rounded-md font-semibold ${bizBadge(c.business_type)}`}>{c.business_type}</span>
-                              )}
-                            </div>
-                            <p className="text-xs text-slate-500">{c.email} · {c.state} · NAICS {c.naics_code}</p>
-                          </div>
-                          <div className="flex items-center gap-3 flex-shrink-0">
-                            <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg ${sc.bg} ${sc.color}`}>
-                              <SI className="w-3 h-3" />{sc.label}
-                            </span>
-                            {c.score != null && (
-                              <span className={`text-xs font-black px-2 py-1 rounded-lg ${scoreBg(c.score)} ${scoreClr(c.score)}`}>{c.score}</span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-xs font-bold text-slate-600">{c.state || '—'}</td>
+                                  <td className="px-3 py-2.5">
+                                    <span className="font-mono text-xs text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{c.naics_code || '—'}</span>
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${bizBadge(c.business_type)}`}>{c.business_type || 'Small Business'}</span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-xs text-slate-500 font-mono">{c.registration_date ? c.registration_date.slice(0, 10) : '—'}</td>
+                                  <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                                    <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg w-fit ${sc.bg} ${sc.color}`}>
+                                      <SI className="w-3 h-3 flex-shrink-0" />
+                                      <select value={c.pipeline_stage || 'new'} onChange={e => stageChange(c.id, e.target.value as PipelineStage)} className={`bg-transparent border-none outline-none cursor-pointer font-bold text-xs ${sc.color} appearance-none`}>
+                                        {(Object.keys(STAGES) as PipelineStage[]).map(s => (
+                                          <option key={s} value={s}>{STAGES[s].label}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                                    {te ? (
+                                      <div className="flex flex-col gap-1">
+                                        <div className="flex gap-1 items-center">
+                                          <input type="date" value={te.start} onChange={e => setTrialEdits(p => ({ ...p, [c.id]: { ...p[c.id], start: e.target.value } }))} className="text-xs border border-slate-200 rounded px-1.5 py-0.5 w-[108px] focus:outline-none focus:border-orange-400" />
+                                          <span className="text-xs text-slate-400">→</span>
+                                          <input type="date" value={te.end}   onChange={e => setTrialEdits(p => ({ ...p, [c.id]: { ...p[c.id], end:   e.target.value } }))} className="text-xs border border-slate-200 rounded px-1.5 py-0.5 w-[108px] focus:outline-none focus:border-orange-400" />
+                                        </div>
+                                        <div className="flex gap-1">
+                                          <button onClick={() => saveTrialDates(c.id)} className="text-xs px-2 py-0.5 bg-orange-500 text-white rounded font-bold hover:bg-orange-600">Save</button>
+                                          <button onClick={() => setTrialEdits(p => { const n = { ...p }; delete n[c.id]; return n; })} className="text-xs px-2 py-0.5 border border-slate-200 text-slate-500 rounded hover:bg-slate-50">×</button>
+                                        </div>
+                                      </div>
+                                    ) : isTrial && c.trial_end ? (
+                                      <button onClick={() => setTrialEdits(p => ({ ...p, [c.id]: { start: c.trial_start?.slice(0,10) || '', end: c.trial_end?.slice(0,10) || '' } }))}
+                                        className={`text-xs font-semibold px-2 py-1 rounded-lg flex items-center gap-1 ${trialDaysLeft !== null && trialDaysLeft <= 3 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'} hover:opacity-80 transition`}>
+                                        <Timer className="w-3 h-3" />
+                                        {trialDaysLeft !== null && trialDaysLeft > 0 ? `${trialDaysLeft}d left` : 'Expired'} · {c.trial_end.slice(0,10)}
+                                      </button>
+                                    ) : (
+                                      <button onClick={() => {
+                                        const today = new Date().toISOString().slice(0,10);
+                                        const end14 = new Date(Date.now() + 14*86400000).toISOString().slice(0,10);
+                                        setTrialEdits(p => ({ ...p, [c.id]: { start: today, end: end14 } }));
+                                      }} className="text-xs text-slate-400 hover:text-orange-600 hover:bg-orange-50 px-2 py-1 rounded-lg transition flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                                        <Plus className="w-3 h-3" />Set Trial
+                                      </button>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    {c.score != null && (
+                                      <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${scoreBg(c.score)} ${scoreClr(c.score)}`}>{c.score}</span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                                    <button onClick={() => openDrawer(c)} className="p-1.5 hover:bg-slate-100 rounded-lg opacity-0 group-hover:opacity-100 transition">
+                                      <Eye className="w-3.5 h-3.5 text-slate-500" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {sortedPipeline.length === 0 && (
+                              <tr><td colSpan={10} className="py-16 text-center text-sm text-slate-400">No leads match current filters</td></tr>
                             )}
-                            <select
-                              value={c.pipeline_stage || 'new'}
-                              onChange={e => { e.stopPropagation(); stageChange(c.id, e.target.value as PipelineStage); }}
-                              onClick={e => e.stopPropagation()}
-                              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 font-semibold focus:outline-none cursor-pointer"
-                            >
-                              {(Object.keys(STAGES) as PipelineStage[]).map(s => (
-                                <option key={s} value={s}>{STAGES[s].label}</option>
-                              ))}
-                            </select>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {sortedPipeline.length > 0 && (
+                      <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                        <span className="text-xs text-slate-500">{sortedPipeline.length} leads{crmSelected.size > 0 ? ` · ${crmSelected.size} selected` : ' · Click rows to select for campaign'}</span>
+                        <div className="flex items-center gap-4 text-xs">
+                          {(Object.keys(STAGES) as PipelineStage[]).filter(s => (funnel[s] || 0) > 0).map(s => (
+                            <span key={s} className={`font-bold ${STAGES[s].color}`}>{STAGES[s].label}: {funnel[s]}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Campaign launcher */}
+                  {showCampaign && (
+                    <div className="bg-white rounded-2xl border-2 border-orange-200 shadow-lg p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+                            <Mail className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="font-black text-slate-900 text-sm">Email Campaign</h3>
+                            <p className="text-xs text-slate-500">{crmSelected.size} contractor{crmSelected.size !== 1 ? 's' : ''} selected from pipeline</p>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Tasks + Activity Feed */}
-              <div className="flex flex-col gap-4">
-
-                {/* Tasks */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ListTodo className="w-4 h-4 text-slate-600" />
-                      <h2 className="font-black text-slate-900 text-sm">Tasks</h2>
-                      {overdueCount > 0 && (
-                        <span className="text-xs font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">{overdueCount} overdue</span>
+                        <button onClick={() => setShowCampaign(false)} className="p-1.5 hover:bg-slate-100 rounded-lg"><X className="w-4 h-4 text-slate-400" /></button>
+                      </div>
+                      <div className="flex gap-3 items-end flex-wrap">
+                        <div className="flex-1 min-w-[240px]">
+                          <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Select Template</label>
+                          <select className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:border-orange-400"
+                            onChange={e => { const t = templates.find(x => x.id === e.target.value); if (t) setCampaignTpl(t); }} defaultValue="">
+                            <option value="" disabled>Choose a template...</option>
+                            {templates.map(t => <option key={t.id} value={t.id}>{t.name} — {t.category}</option>)}
+                          </select>
+                        </div>
+                        <button
+                          onClick={() => { setContractors(pipeline.filter(c => crmSelected.has(c.id))); setSelected(new Set<string>(crmSelected)); setCurTemplate(campaignTpl); setShowSendModal(true); setShowCampaign(false); }}
+                          disabled={!campaignTpl}
+                          className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl text-sm font-bold hover:from-orange-600 hover:to-orange-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm flex items-center gap-2"
+                        >
+                          <Send className="w-4 h-4" />Send Campaign
+                        </button>
+                        <button onClick={async () => { const sel = pipeline.filter(c => crmSelected.has(c.id)); setContractors(sel); setSelected(new Set<string>(crmSelected)); await genAI(); setShowSendModal(true); setShowCampaign(false); }}
+                          className="px-4 py-2.5 border-2 border-orange-300 text-orange-700 rounded-xl text-sm font-bold hover:bg-orange-50 transition flex items-center gap-2">
+                          <Sparkles className="w-4 h-4" />AI Generate
+                        </button>
+                      </div>
+                      {campaignTpl && (
+                        <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <p className="text-xs font-bold text-slate-700">{campaignTpl.subject}</p>
+                          <p className="text-xs text-slate-400 mt-1 line-clamp-2">{campaignTpl.body?.slice(0,120)}...</p>
+                        </div>
                       )}
                     </div>
-                    <button
-                      onClick={() => { setEditTask({ priority: 'medium', status: 'pending' }); setNewTaskModal(true); }}
-                      className="w-7 h-7 bg-slate-800 text-white rounded-lg flex items-center justify-center hover:bg-slate-700 transition"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto">
-                    {tasks.filter(t => t.status !== 'done').sort((a, b) => a.status === 'overdue' ? -1 : 1).map(task => (
-                      <div key={task.id} className={`px-4 py-3 flex items-start gap-3 ${task.status === 'overdue' ? 'bg-red-50' : ''}`}>
-                        <button
-                          onClick={() => completeTask(task.id)}
-                          className={`mt-0.5 w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center hover:border-emerald-400 transition ${task.status === 'overdue' ? 'border-red-400' : 'border-slate-300'}`}
-                        >
-                          <Check className="w-2.5 h-2.5 text-transparent hover:text-emerald-500" />
+                  )}
+
+                  {/* Tasks + Activity + Funnel as 3-col row below table */}
+                  <div className="grid grid-cols-3 gap-4">
+
+                    {/* Tasks */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ListTodo className="w-4 h-4 text-slate-600" />
+                          <h2 className="font-black text-slate-900 text-sm">Tasks</h2>
+                          {overdueCount > 0 && (
+                            <span className="text-xs font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">{overdueCount} overdue</span>
+                          )}
+                        </div>
+                        <button onClick={() => { setEditTask({ priority: 'medium', status: 'pending' }); setNewTaskModal(true); }} className="w-7 h-7 bg-slate-800 text-white rounded-lg flex items-center justify-center hover:bg-slate-700 transition">
+                          <Plus className="w-4 h-4" />
                         </button>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-xs font-bold leading-tight ${task.status === 'overdue' ? 'text-red-800' : 'text-slate-900'}`}>{task.title}</p>
-                          <p className="text-xs text-slate-500 mt-0.5 truncate">{task.contractor_name}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
-                              task.priority === 'high' ? 'bg-red-100 text-red-700' :
-                              task.priority === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                            }`}>{task.priority}</span>
-                            <span className={`text-xs ${task.status === 'overdue' ? 'text-red-600 font-bold' : 'text-slate-400'}`}>
-                              Due {task.due_date?.slice(0, 10)}
-                            </span>
-                          </div>
-                        </div>
                       </div>
-                    ))}
-                    {tasks.filter(t => t.status !== 'done').length === 0 && (
-                      <div className="px-4 py-6 text-center text-sm text-slate-400">All tasks clear! 🎉</div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Activity Feed */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-slate-600" />
-                    <h2 className="font-black text-slate-900 text-sm">Recent Activity</h2>
-                  </div>
-                  <div className="divide-y divide-slate-100 max-h-52 overflow-y-auto">
-                    {activities.slice(0, 10).map(act => {
-                      const ac = ACT_CFG[act.type] || ACT_CFG['note_added']; const AI = ac.icon;
-                      return (
-                        <div key={act.id} className="px-4 py-3 flex items-start gap-3">
-                          <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <AI className={`w-3.5 h-3.5 ${ac.color}`} />
+                      <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                        {tasks.filter(t => t.status !== 'done').sort((a, b) => a.status === 'overdue' ? -1 : 1).map(task => (
+                          <div key={task.id} className={`px-4 py-3 flex items-start gap-3 ${task.status === 'overdue' ? 'bg-red-50' : ''}`}>
+                            <button onClick={() => completeTask(task.id)} className={`mt-0.5 w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center hover:border-emerald-400 transition ${task.status === 'overdue' ? 'border-red-400' : 'border-slate-300'}`}>
+                              <Check className="w-2.5 h-2.5 text-transparent hover:text-emerald-500" />
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-bold leading-tight ${task.status === 'overdue' ? 'text-red-800' : 'text-slate-900'}`}>{task.title}</p>
+                              <p className="text-xs text-slate-500 mt-0.5 truncate">{task.contractor_name}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${task.priority === 'high' ? 'bg-red-100 text-red-700' : task.priority === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>{task.priority}</span>
+                                <span className={`text-xs ${task.status === 'overdue' ? 'text-red-600 font-bold' : 'text-slate-400'}`}>Due {task.due_date?.slice(0, 10)}</span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-slate-700 truncate">{act.contractor_name || 'Contractor'}</p>
-                            <p className="text-xs text-slate-500">{act.description}</p>
-                          </div>
-                          <span className="text-xs text-slate-400 flex-shrink-0">{timeAgo(act.created_at)}</span>
-                        </div>
-                      );
-                    })}
-                    {activities.length === 0 && (
-                      <div className="px-4 py-6 text-center text-sm text-slate-400">No activity yet</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Funnel Breakdown */}
-            <div className="grid grid-cols-2 gap-6">
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                <h2 className="font-black text-slate-900 mb-4 flex items-center gap-2">
-                  <PieChart className="w-4 h-4 text-violet-600" />Funnel Breakdown
-                </h2>
-                <div className="space-y-3">
-                  {(Object.keys(STAGES) as PipelineStage[]).map(stage => {
-                    const sc = STAGES[stage]; const count = funnel[stage] || 0;
-                    const pct = pipeline.length ? Math.round((count / pipeline.length) * 100) : 0;
-                    const SI = sc.icon;
-                    return (
-                      <div key={stage} className="flex items-center gap-3">
-                        <div className={`w-6 h-6 rounded-lg ${sc.bg} flex items-center justify-center flex-shrink-0`}>
-                          <SI className={`w-3 h-3 ${sc.color}`} />
-                        </div>
-                        <span className="text-xs font-semibold text-slate-700 w-24 flex-shrink-0">{sc.label}</span>
-                        <div className="flex-1 bg-slate-100 rounded-full h-2">
-                          <div className={`h-2 rounded-full ${sc.bg.replace('-100', '-400')}`} style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className="text-xs font-black text-slate-700 w-5 text-right">{count}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Completed Tasks */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-                  <CheckSquare className="w-4 h-4 text-emerald-600" />
-                  <h2 className="font-black text-slate-900 text-sm">Completed Tasks</h2>
-                </div>
-                <div className="divide-y divide-slate-100 max-h-52 overflow-y-auto">
-                  {tasks.filter(t => t.status === 'done').map(task => (
-                    <div key={task.id} className="px-4 py-3 flex items-center gap-3 opacity-60">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-700 line-through truncate">{task.title}</p>
-                        <p className="text-xs text-slate-400">{task.contractor_name}</p>
+                        ))}
+                        {tasks.filter(t => t.status !== 'done').length === 0 && (
+                          <div className="px-4 py-6 text-center text-sm text-slate-400">All tasks clear! 🎉</div>
+                        )}
                       </div>
                     </div>
-                  ))}
-                  {tasks.filter(t => t.status === 'done').length === 0 && (
-                    <div className="px-4 py-6 text-center text-sm text-slate-400">No completed tasks yet</div>
-                  )}
+
+                    {/* Activity Feed */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-slate-600" />
+                        <h2 className="font-black text-slate-900 text-sm">Recent Activity</h2>
+                      </div>
+                      <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                        {activities.slice(0, 15).map(act => {
+                          const ac = ACT_CFG[act.type] || ACT_CFG['note_added']; const AI = ac.icon;
+                          return (
+                            <div key={act.id} className="px-4 py-3 flex items-start gap-3">
+                              <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <AI className={`w-3.5 h-3.5 ${ac.color}`} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-slate-700 truncate">{act.contractor_name || 'Contractor'}</p>
+                                <p className="text-xs text-slate-500">{act.description}</p>
+                              </div>
+                              <span className="text-xs text-slate-400 flex-shrink-0">{timeAgo(act.created_at)}</span>
+                            </div>
+                          );
+                        })}
+                        {activities.length === 0 && (
+                          <div className="px-4 py-6 text-center text-sm text-slate-400">No activity yet</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Funnel Breakdown */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                      <h2 className="font-black text-slate-900 mb-4 flex items-center gap-2 text-sm">
+                        <PieChart className="w-4 h-4 text-violet-600" />Funnel Breakdown
+                      </h2>
+                      <div className="space-y-2.5">
+                        {(Object.keys(STAGES) as PipelineStage[]).map(stage => {
+                          const sc = STAGES[stage]; const count = funnel[stage] || 0;
+                          const pct = pipeline.length ? Math.round((count / pipeline.length) * 100) : 0;
+                          const SI = sc.icon;
+                          return (
+                            <div key={stage} className="flex items-center gap-2">
+                              <div className={`w-5 h-5 rounded-md ${sc.bg} flex items-center justify-center flex-shrink-0`}>
+                                <SI className={`w-3 h-3 ${sc.color}`} />
+                              </div>
+                              <span className="text-xs font-semibold text-slate-600 w-20 flex-shrink-0">{sc.label}</span>
+                              <div className="flex-1 bg-slate-100 rounded-full h-1.5">
+                                <div className={`h-1.5 rounded-full ${sc.bg.replace('-100', '-400')}`} style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-xs font-black text-slate-700 w-5 text-right">{count}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         )}
 
