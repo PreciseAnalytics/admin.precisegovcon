@@ -38,6 +38,8 @@ interface Contractor {
   business_type?: string;
   registration_date?: string;
   sam_gov_id?: string;
+  uei_number?: string;
+  cage_code?: string;
   naics_code?: string;
   state?: string;
   contacted?: boolean;
@@ -278,6 +280,8 @@ export default function OutreachPage() {
   const [crmSearch,     setCrmSearch]     = useState('');
   const [detailActs,    setDetailActs]    = useState<CrmActivity[]>([]);
   const [detailTasks,   setDetailTasks]   = useState<CrmTask[]>([]);
+  const [showAddTest,   setShowAddTest]   = useState(false);
+  const [testTarget,    setTestTarget]    = useState({ name: '', email: '', uei: '', cage: '', naics: '', state: '', bizType: 'Small Business' });
 
   // ── Outreach UI state ────────────────────────────────────────────────────────
   const [selected,      setSelected]      = useState<Set<string>>(new Set());
@@ -671,12 +675,15 @@ export default function OutreachPage() {
     return acc;
   }, {} as Record<PipelineStage, Contractor[]>);
 
+  const now = new Date();
   const filteredOpps = MOCK_OPPS.filter(o =>
     !oppSearch ||
     o.title.toLowerCase().includes(oppSearch.toLowerCase()) ||
     o.agency.toLowerCase().includes(oppSearch.toLowerCase()) ||
     o.naicsCode.includes(oppSearch)
   );
+  const activeOpps  = filteredOpps.filter(o => new Date(o.responseDeadline) >= now);
+  const expiredOpps = filteredOpps.filter(o => new Date(o.responseDeadline) <  now);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -808,7 +815,7 @@ export default function OutreachPage() {
             {/* Pipeline — Full-width data table */}
             {(() => {
               const sortedPipeline = [...pipeline]
-                .filter(c => !crmSearch || c.name.toLowerCase().includes(crmSearch.toLowerCase()) || (c.naics_code || '').includes(crmSearch) || (c.state || '').toLowerCase().includes(crmSearch.toLowerCase()))
+                .filter(c => !crmSearch || c.name.toLowerCase().includes(crmSearch.toLowerCase()) || (c.naics_code || '').includes(crmSearch) || (c.state || '').toLowerCase().includes(crmSearch.toLowerCase()) || (c.uei_number || '').toUpperCase().includes(crmSearch.toUpperCase()) || (c.cage_code || '').toUpperCase().includes(crmSearch.toUpperCase()))
                 .filter(c => stageFilter === 'all' || (c.pipeline_stage || 'new') === stageFilter)
                 .sort((a, b) => {
                   let av: any = a[sortKey as keyof Contractor] ?? '';
@@ -859,6 +866,12 @@ export default function OutreachPage() {
                         <h2 className="font-black text-slate-900 text-sm">Sales Pipeline</h2>
                         <p className="text-xs text-slate-400">{sortedPipeline.length} of {pipeline.length} leads</p>
                       </div>
+                      <button
+                        onClick={() => setShowAddTest(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-100 text-violet-700 border border-violet-200 rounded-lg text-xs font-bold hover:bg-violet-200 transition"
+                      >
+                        <Plus className="w-3.5 h-3.5" />Add Test Company
+                      </button>
                       <div className="relative">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                         <input value={crmSearch} onChange={e => setCrmSearch(e.target.value)} placeholder="Search name, state, NAICS..." className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none w-44" />
@@ -1154,6 +1167,94 @@ export default function OutreachPage() {
                 </div>
               );
             })()}
+          </div>
+        )}
+
+        {/* ── Add Test Company Modal ────────────────────────────────────────── */}
+        {showAddTest && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-lg font-black text-slate-900">Add Test Company</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Manually add any company to the CRM pipeline for testing — e.g. Precise Analytics</p>
+                </div>
+                <button onClick={() => setShowAddTest(false)} className="p-1.5 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5 text-slate-400" /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Company Name *</label>
+                  <input value={testTarget.name} onChange={e => setTestTarget(p => ({ ...p, name: e.target.value }))} placeholder="Precise Analytics LLC" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:border-violet-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Email *</label>
+                  <input value={testTarget.email} onChange={e => setTestTarget(p => ({ ...p, email: e.target.value }))} placeholder="contact@company.com" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:border-violet-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Business Type</label>
+                  <select value={testTarget.bizType} onChange={e => setTestTarget(p => ({ ...p, bizType: e.target.value }))} className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm bg-white focus:outline-none">
+                    {['Small Business','Veteran-Owned','Woman-Owned','8(a) Certified','HUBZone','Minority-Owned','Service-Disabled Veteran-Owned'].map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">UEI Number</label>
+                  <input value={testTarget.uei} onChange={e => setTestTarget(p => ({ ...p, uei: e.target.value }))} placeholder="e.g. ABCD1234EFG5" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:border-violet-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">CAGE Code</label>
+                  <input value={testTarget.cage} onChange={e => setTestTarget(p => ({ ...p, cage: e.target.value }))} placeholder="e.g. 7XYZ4" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:border-violet-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">NAICS Code</label>
+                  <input value={testTarget.naics} onChange={e => setTestTarget(p => ({ ...p, naics: e.target.value }))} placeholder="e.g. 541512" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:border-violet-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">State</label>
+                  <input value={testTarget.state} onChange={e => setTestTarget(p => ({ ...p, state: e.target.value }))} placeholder="VA" maxLength={2} className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:border-violet-400" />
+                </div>
+              </div>
+              <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-4">
+                <p className="text-xs text-violet-700 font-semibold">ℹ️ This creates a real DB record — you can then test sending emails, offer code redemption, stage changes, etc. Delete it from the pipeline table when done.</p>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setShowAddTest(false)} className="flex-1 px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                <button
+                  onClick={async () => {
+                    if (!testTarget.name || !testTarget.email) { notify('Name and email required', 'error'); return; }
+                    try {
+                      const r = await fetch('/api/crm/pipeline', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({
+                          name:          testTarget.name,
+                          email:         testTarget.email,
+                          business_type: testTarget.bizType,
+                          uei_number:    testTarget.uei  || null,
+                          cage_code:     testTarget.cage || null,
+                          naics_code:    testTarget.naics || null,
+                          state:         testTarget.state || null,
+                          pipeline_stage:'new',
+                          score:         50,
+                          notes:         'TEST RECORD — added manually via admin CRM',
+                        }),
+                      });
+                      if (r.ok) {
+                        notify(`✅ ${testTarget.name} added to pipeline`);
+                        setTestTarget({ name: '', email: '', uei: '', cage: '', naics: '', state: '', bizType: 'Small Business' });
+                        setShowAddTest(false);
+                        fetchPipeline();
+                      } else {
+                        const d = await r.json();
+                        notify(d.error || 'Failed — does /api/crm/pipeline support POST?', 'error');
+                      }
+                    } catch { notify('Request failed', 'error'); }
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-bold hover:bg-violet-700 transition"
+                >
+                  Add to Pipeline
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1471,11 +1572,19 @@ export default function OutreachPage() {
               <input type="text" placeholder="Search opportunities by title, agency, NAICS..." value={oppSearch} onChange={e => setOppSearch(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-slate-300 bg-white" />
             </div>
             <div className="space-y-4">
-              {filteredOpps.map(opp => {
+            {/* Live count banner */}
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-sm font-bold text-slate-700">{activeOpps.length} Live</span>
+              <span className="w-1 h-1 rounded-full bg-slate-300" />
+              {expiredOpps.length > 0 && <span className="text-sm font-semibold text-slate-400">{expiredOpps.length} Expired</span>}
+              <span className="ml-auto text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">⚠ Mock data — connect SAM.gov API for live results</span>
+            </div>
+              {(activeOpps.length > 0 ? activeOpps : filteredOpps).map(opp => {
                 const isSel = selOpp?.id === opp.id;
                 const days  = Math.ceil((new Date(opp.responseDeadline).getTime() - Date.now()) / 86400000);
+                const isExp = days < 0;
                 return (
-                  <div key={opp.id} className={`bg-white rounded-2xl border transition-all ${isSel ? 'border-emerald-400 shadow-lg' : 'border-slate-200 hover:border-slate-300 hover:shadow-md'}`}>
+                  <div key={opp.id} className={`bg-white rounded-2xl border transition-all ${isExp ? 'opacity-40 border-slate-100' : isSel ? 'border-emerald-400 shadow-lg' : 'border-slate-200 hover:border-slate-300 hover:shadow-md'}`}>
                     <div className="p-5 cursor-pointer" onClick={() => setSelOpp(isSel ? null : opp)}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
@@ -1483,7 +1592,8 @@ export default function OutreachPage() {
                             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${saBadge(opp.setAside)}`}>{opp.setAside || 'Open'}</span>
                             <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{opp.type}</span>
                             <span className="font-mono text-xs font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">NAICS {opp.naicsCode}</span>
-                            {days <= 7 && <span className="text-xs font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">⚡ {days}d left</span>}
+                            {days < 0 && <span className="text-xs font-bold bg-slate-200 text-slate-500 px-2 py-0.5 rounded-full">Expired {Math.abs(days)}d ago</span>}
+                            {days >= 0 && days <= 7 && <span className="text-xs font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">⚡ {days}d left</span>}
                           </div>
                           <h3 className="font-black text-slate-900 text-base">{opp.title}</h3>
                           <p className="text-sm text-slate-500 mt-0.5 font-medium">{opp.agency}</p>
@@ -1619,6 +1729,61 @@ export default function OutreachPage() {
               ))}
             </div>
 
+            {/* ── TEST PANEL ── */}
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-5 mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-base font-black text-amber-800">🧪 Test an Offer Code</span>
+                <span className="text-xs bg-amber-200 text-amber-800 font-bold px-2 py-0.5 rounded-full">Dev Tool</span>
+              </div>
+              <p className="text-sm text-amber-700 mb-4">Simulates a redemption call to <code className="bg-amber-100 px-1 rounded font-mono">/api/track/signup</code> — increments usage_count and moves the contractor to <strong>trial</strong> stage. Use this to verify tracking end-to-end before going live.</p>
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div>
+                  <label className="block text-xs font-bold text-amber-700 mb-1">Offer Code *</label>
+                  <select id="test-code-select" className="w-full px-3 py-2 border-2 border-amber-300 rounded-xl text-sm font-semibold bg-white focus:outline-none">
+                    {offerCodes.filter(c => c.active).map(c => <option key={c.id} value={c.code}>{c.code} — {c.description}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-amber-700 mb-1">Test Email (contractor email) *</label>
+                  <input id="test-email-input" type="email" placeholder="test@company.com" className="w-full px-3 py-2 border-2 border-amber-300 rounded-xl text-sm bg-white focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-amber-700 mb-1">Trial Days</label>
+                  <input id="test-days-input" type="number" defaultValue={14} min={1} max={90} className="w-full px-3 py-2 border-2 border-amber-300 rounded-xl text-sm bg-white focus:outline-none" />
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  const codeEl  = document.getElementById('test-code-select') as HTMLSelectElement;
+                  const emailEl = document.getElementById('test-email-input') as HTMLInputElement;
+                  const daysEl  = document.getElementById('test-days-input') as HTMLInputElement;
+                  const code    = codeEl?.value;
+                  const email   = emailEl?.value?.trim();
+                  const days    = parseInt(daysEl?.value) || 14;
+                  if (!code || !email) { notify('Code and email are required', 'error'); return; }
+                  try {
+                    const r = await fetch('/api/track/signup', {
+                      method:  'POST',
+                      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer test-local' },
+                      body:    JSON.stringify({ email, offer_code: code, trial_days: days }),
+                    });
+                    const d = await r.json();
+                    if (r.ok && d.success) {
+                      notify(`✅ Code redeemed! Contractor → trial stage. Usage: ${d.usage_count ?? '+'}`);
+                      fetchOfferCodes(); fetchPipeline(); fetchActivities();
+                      if (emailEl) emailEl.value = '';
+                    } else {
+                      notify(d.error || 'Redemption failed — is the contractor email in the DB?', 'error');
+                    }
+                  } catch { notify('Request failed — check server console', 'error'); }
+                }}
+                className="px-5 py-2.5 bg-amber-600 text-white rounded-xl text-sm font-bold hover:bg-amber-700 transition flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />Simulate Redemption
+              </button>
+            </div>
+
+            {/* Code Table */}
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
               <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
                 <div className="grid grid-cols-7 gap-4 text-xs font-bold text-slate-500 uppercase tracking-wider">

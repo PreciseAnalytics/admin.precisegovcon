@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { randomUUID } from 'crypto';
 
 // GET /api/crm/pipeline — fetch contractors with pipeline/CRM data
 export async function GET(req: NextRequest) {
@@ -150,3 +151,88 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function POST(req: NextRequest) {
+  try {
+    await requireSession();
+
+    const {
+      name, email, business_type, uei_number, cage_code,
+      naics_code, state, pipeline_stage, score, notes,
+    } = await req.json();
+
+    if (!name || !email) {
+      return NextResponse.json({ error: 'name and email are required' }, { status: 400 });
+    }
+
+    // Prevent duplicate emails
+    const existing = await prisma.contractor.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) {
+      return NextResponse.json({ error: 'A contractor with this email already exists', id: existing.id }, { status: 409 });
+    }
+
+    const contractor = await prisma.contractor.create({
+      data: {
+        id:             randomUUID(),
+        name,
+        email:          email.toLowerCase().trim(),
+        business_type:  business_type  || 'Small Business',
+        uei_number:     uei_number     || null,
+        cage_code:      cage_code      || null,
+        naics_code:     naics_code     || null,
+        state:          state?.toUpperCase() || null,
+        pipeline_stage: pipeline_stage || 'new',
+        score:          score          ?? 50,
+        notes:          notes          || null,
+        contacted:      false,
+        enrolled:       false,
+        contact_attempts: 0,
+        created_at:     new Date(),
+      },
+    });
+
+    // Log activity
+    await prisma.crmActivity.create({
+      data: {
+        contractor_id: contractor.id,
+        type:          'note_added',
+        description:   `Manually added to pipeline: ${notes || 'Test record'}`,
+        created_by:    'admin',
+      },
+    });
+
+    return NextResponse.json({ success: true, contractor });
+  } catch (err: any) {
+    console.error('[crm/pipeline POST]', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

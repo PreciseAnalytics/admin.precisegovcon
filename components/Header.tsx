@@ -1,289 +1,312 @@
-//app/components/header.tsx
+import React, { useState, MouseEvent } from 'react';
+import { 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  Button, 
+  IconButton, 
+  Avatar, 
+  Menu, 
+  MenuItem, 
+  Box, 
+  Container,
+  Badge,
+  useTheme,
+  alpha
+} from '@mui/material';
+import { 
+  Menu as MenuIcon,
+  NotificationsNone as NotificationsIcon,
+  AccountCircle,
+  Dashboard as DashboardIcon,
+  People as PeopleIcon,
+  Settings as SettingsIcon,
+  Assessment as AssessmentIcon
+} from '@mui/icons-material';
+import { styled } from '@mui/material/styles';
 
-'use client';
-
-import { useState, useEffect, useRef } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import {
-  Menu, X, LogOut, Settings, Bell, User, LayoutDashboard, Users,
-  CreditCard, Mail, BarChart3, FileText, Shield, ChevronDown,
-} from 'lucide-react';
-import Link from 'next/link';
-
-interface HeaderProps {
-  title?: string;
-  showMobileMenu?: boolean;
+interface NavButtonProps {
+  active?: boolean;
 }
 
-const NAV_ITEMS = [
-  { href: '/dashboard',               label: 'Dashboard',            icon: LayoutDashboard },
-  { href: '/dashboard/users',         label: 'Users',                icon: Users },
-  { href: '/dashboard/subscriptions', label: 'Subscriptions',        icon: CreditCard },
-  { href: '/dashboard/outreach',      label: 'Contractor Outreach',  icon: Mail },
-  { href: '/dashboard/audit-logs',    label: 'Audit Logs',           icon: FileText },
-  { href: '/dashboard/analytics',     label: 'Analytics',            icon: BarChart3 },
-  { href: '/dashboard/settings',      label: 'Settings',             icon: Settings },
-];
+// Define menu item type
+interface MenuItem {
+  id: string;
+  label: string;
+  icon: JSX.Element;
+}
 
-export default function Header({ title = 'Dashboard', showMobileMenu = true }: HeaderProps) {
-  const router = useRouter();
-  const pathname = usePathname() || '/dashboard';
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+// Styled components for modern look
+const StyledAppBar = styled(AppBar)(({ theme }) => ({
+  background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`,
+  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+  backdropFilter: 'blur(10px)',
+  borderBottom: `1px solid ${alpha(theme.palette.common.white, 0.1)}`,
+}));
 
-  useEffect(() => {
-    const saved = localStorage.getItem('admin_avatar');
-    if (saved) setAvatarUrl(saved);
-    const handler = () => setAvatarUrl(localStorage.getItem('admin_avatar'));
-    window.addEventListener('avatar_updated', handler);
-    return () => window.removeEventListener('avatar_updated', handler);
-  }, []);
+const LogoContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  gap: theme.spacing(1),
+  cursor: 'pointer',
+  '&:hover': {
+    opacity: 0.9,
+  },
+}));
 
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setUserMenuOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
+const LogoDot = styled(Box)(({ theme }) => ({
+  width: 8,
+  height: 8,
+  borderRadius: '50%',
+  background: theme.palette.secondary.main,
+  marginLeft: 4,
+}));
 
-  const handleLogout = async () => {
-    try {
-      const r = await fetch('/api/auth/logout', { method: 'POST' });
-      if (r.ok) { router.push('/'); router.refresh(); }
-    } catch (e) { console.error('Logout failed:', e); }
+const NavButton = styled(Button)<NavButtonProps>(({ theme, active }) => ({
+  color: theme.palette.common.white,
+  margin: theme.spacing(0, 0.5),
+  padding: theme.spacing(1, 2),
+  borderRadius: theme.spacing(1),
+  textTransform: 'none',
+  fontSize: '1rem',
+  fontWeight: active ? 600 : 400,
+  backgroundColor: active ? alpha(theme.palette.common.white, 0.15) : 'transparent',
+  '&:hover': {
+    backgroundColor: alpha(theme.palette.common.white, 0.25),
+    transform: 'translateY(-2px)',
+    transition: 'all 0.2s ease',
+  },
+  '& .MuiButton-startIcon': {
+    marginRight: theme.spacing(1),
+    color: active ? theme.palette.secondary.main : theme.palette.common.white,
+  },
+}));
+
+const IconButtonStyled = styled(IconButton)(({ theme }) => ({
+  color: theme.palette.common.white,
+  backgroundColor: alpha(theme.palette.common.white, 0.1),
+  marginLeft: theme.spacing(1),
+  '&:hover': {
+    backgroundColor: alpha(theme.palette.common.white, 0.2),
+    transform: 'scale(1.05)',
+    transition: 'all 0.2s ease',
+  },
+}));
+
+const ProfileContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  gap: theme.spacing(1),
+  marginLeft: theme.spacing(2),
+  padding: theme.spacing(0.5, 1),
+  borderRadius: theme.spacing(3),
+  backgroundColor: alpha(theme.palette.common.white, 0.1),
+  cursor: 'pointer',
+  '&:hover': {
+    backgroundColor: alpha(theme.palette.common.white, 0.2),
+    transition: 'all 0.2s ease',
+  },
+}));
+
+const StyledAvatar = styled(Avatar)(({ theme }) => ({
+  width: 32,
+  height: 32,
+  border: `2px solid ${theme.palette.secondary.main}`,
+}));
+
+const Header = () => {
+  const theme = useTheme();
+  const [activeMenu, setActiveMenu] = useState<string>('dashboard');
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [mobileMenuAnchor, setMobileMenuAnchor] = useState<null | HTMLElement>(null);
+
+  const menuItems: MenuItem[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
+    { id: 'analytics', label: 'Analytics', icon: <AssessmentIcon /> },
+    { id: 'team', label: 'Team', icon: <PeopleIcon /> },
+    { id: 'settings', label: 'Settings', icon: <SettingsIcon /> },
+  ];
+
+  const handleMenuClick = (menuId: string) => {
+    setActiveMenu(menuId);
+    // Add your navigation logic here
   };
 
-  const isActive = (href: string) => {
-    if (href === '/dashboard') return pathname === '/dashboard';
-    return pathname.startsWith(href);
+  const handleProfileMenuOpen = (event: MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleProfileMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleMobileMenuOpen = (event: MouseEvent<HTMLElement>) => {
+    setMobileMenuAnchor(event.currentTarget);
+  };
+
+  const handleMobileMenuClose = () => {
+    setMobileMenuAnchor(null);
   };
 
   return (
-    <>
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* HEADER — solid dark bg, 72px, orange bottom border                    */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      <header
-        className="sticky top-0 z-40"
-        style={{ background: '#0f172a', borderBottom: '3px solid #ea580c', minHeight: 72 }}
-      >
-        <div className="px-6 lg:px-8 h-full">
-          <div className="flex items-center justify-between" style={{ height: 72 }}>
+    <StyledAppBar position="sticky">
+      <Container maxWidth="xl">
+        <Toolbar disableGutters sx={{ minHeight: { xs: 64, md: 72 } }}>
+          {/* Logo Section */}
+          <LogoContainer onClick={() => handleMenuClick('dashboard')}>
+            <Typography
+              variant="h5"
+              component="div"
+              sx={{
+                fontWeight: 700,
+                letterSpacing: '0.5px',
+                background: `linear-gradient(135deg, ${theme.palette.common.white} 0%, ${theme.palette.secondary.light} 100%)`,
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              Brand
+            </Typography>
+            <LogoDot />
+          </LogoContainer>
 
-            {/* ── Left: Logo ──────────────────────────────────────────────── */}
-            <div className="flex items-center gap-3 flex-shrink-0">
-              {showMobileMenu && (
-                <button
-                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                  className="lg:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
-                  aria-label="Toggle menu"
-                >
-                  {mobileMenuOpen
-                    ? <X className="w-5 h-5 text-slate-300" />
-                    : <Menu className="w-5 h-5 text-slate-300" />
-                  }
-                </button>
-              )}
-              <Link href="/dashboard" className="flex items-center gap-3">
-                <img src="/logo.png" alt="PreciseGovCon" className="h-9 w-auto object-contain rounded" />
-                <div className="hidden sm:block">
-                  <p className="text-sm font-bold text-white leading-tight tracking-tight">PreciseGovCon</p>
-                  <p className="text-[11px] font-semibold leading-tight" style={{ color: '#64748b' }}>Admin Portal</p>
-                </div>
-              </Link>
-            </div>
-
-            {/* ── Center: Navigation ──────────────────────────────────────── */}
-            <nav className="hidden lg:flex items-center gap-0.5 mx-4">
-              {NAV_ITEMS.map(item => {
-                const active = isActive(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px] font-semibold transition-all whitespace-nowrap"
-                    style={
-                      active
-                        ? { color: '#fb923c', background: 'rgba(251,146,60,0.15)' }
-                        : { color: '#e2e8f0' }
-                    }
-                    onMouseEnter={e => {
-                      if (!active) {
-                        e.currentTarget.style.color = '#fb923c';
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (!active) {
-                        e.currentTarget.style.color = '#e2e8f0';
-                        e.currentTarget.style.background = 'transparent';
-                      }
-                    }}
-                  >
-                    <item.icon className="w-4 h-4 flex-shrink-0" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
-
-            {/* ── Right: Bell + Avatar ─────────────────────────────────────── */}
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <button
-                className="p-2 rounded-lg hover:bg-white/10 transition-colors relative"
-                aria-label="Notifications"
+          {/* Desktop Navigation */}
+          <Box sx={{ 
+            flexGrow: 1, 
+            display: { xs: 'none', md: 'flex' }, 
+            justifyContent: 'center',
+            gap: 1,
+            mx: 2 
+          }}>
+            {menuItems.map((item) => (
+              <NavButton
+                key={item.id}
+                startIcon={item.icon}
+                active={activeMenu === item.id}
+                onClick={() => handleMenuClick(item.id)}
               >
-                <Bell className="w-5 h-5 text-slate-400" />
-                <span
-                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full"
-                  style={{ background: '#ea580c', boxShadow: '0 0 0 2px #0f172a' }}
-                />
-              </button>
+                {item.label}
+              </NavButton>
+            ))}
+          </Box>
 
-              {/* User dropdown */}
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center gap-2.5 py-1.5 px-2.5 rounded-xl transition-colors"
-                  style={{ background: userMenuOpen ? 'rgba(255,255,255,0.1)' : 'transparent' }}
-                  aria-label="User menu"
-                >
-                  <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center overflow-hidden"
-                    style={{
-                      background: 'linear-gradient(135deg, #ea580c, #c2410c)',
-                      boxShadow: '0 0 0 2px rgba(234,88,12,0.4)',
-                    }}
-                  >
-                    {avatarUrl
-                      ? <img src={avatarUrl} alt="Admin" className="w-full h-full object-cover" />
-                      : <span className="text-sm font-black text-white">AD</span>
-                    }
-                  </div>
-                  <div className="hidden sm:block text-left">
-                    <p className="text-sm font-semibold text-white leading-tight">Admin</p>
-                    <p className="text-[10px] leading-tight truncate max-w-[110px]" style={{ color: '#64748b' }}>
-                      contact@preciseanalyti…
-                    </p>
-                  </div>
-                  <ChevronDown
-                    className={`w-4 h-4 hidden sm:block transition-transform ${userMenuOpen ? 'rotate-180' : ''}`}
-                    style={{ color: '#64748b' }}
-                  />
-                </button>
+          {/* Right Side Icons & Profile */}
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            {/* Mobile Menu Icon */}
+            <IconButtonStyled
+              size="large"
+              edge="start"
+              color="inherit"
+              aria-label="menu"
+              onClick={handleMobileMenuOpen}
+              sx={{ display: { md: 'none' } }}
+            >
+              <MenuIcon />
+            </IconButtonStyled>
 
-                {/* Dropdown */}
-                {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50">
-                    {/* Dropdown header */}
-                    <div className="px-5 py-4" style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)' }}>
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-11 h-11 rounded-full flex items-center justify-center overflow-hidden"
-                          style={{
-                            background: 'linear-gradient(135deg, #ea580c, #c2410c)',
-                            boxShadow: '0 0 0 2px rgba(234,88,12,0.4)',
-                          }}
-                        >
-                          {avatarUrl
-                            ? <img src={avatarUrl} alt="Admin" className="w-full h-full object-cover" />
-                            : <span className="text-base font-black text-white">AD</span>
-                          }
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-white">Admin</p>
-                          <p className="text-[11px]" style={{ color: '#94a3b8' }}>contact@preciseanalytics…</p>
-                        </div>
-                      </div>
-                    </div>
+            {/* Notification Icon */}
+            <IconButtonStyled size="large" color="inherit">
+              <Badge badgeContent={4} color="secondary">
+                <NotificationsIcon />
+              </Badge>
+            </IconButtonStyled>
 
-                    {/* Menu items */}
-                    <div className="py-2">
-                      <Link
-                        href="/dashboard/settings"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-orange-600 transition-colors"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
-                          <Settings className="w-4 h-4 text-slate-500" />
-                        </div>
-                        <div>
-                          <p className="font-semibold">Settings</p>
-                          <p className="text-[10px] text-slate-400">Profile & preferences</p>
-                        </div>
-                      </Link>
-                      <Link
-                        href="/dashboard/settings#security"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-orange-50 hover:text-orange-600 transition-colors"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
-                          <Shield className="w-4 h-4 text-slate-500" />
-                        </div>
-                        <div>
-                          <p className="font-semibold">Security</p>
-                          <p className="text-[10px] text-slate-400">2FA & sessions</p>
-                        </div>
-                      </Link>
-                    </div>
+            {/* Profile Section */}
+            <ProfileContainer onClick={handleProfileMenuOpen}>
+              <StyledAvatar 
+                alt="John Doe" 
+                src="/path-to-avatar.jpg"
+              >
+                <AccountCircle />
+              </StyledAvatar>
+              <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+                <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 600 }}>
+                  John Doe
+                </Typography>
+                <Typography variant="caption" sx={{ color: alpha(theme.palette.common.white, 0.7) }}>
+                  Admin
+                </Typography>
+              </Box>
+            </ProfileContainer>
+          </Box>
 
-                    {/* Logout */}
-                    <div className="border-t border-slate-100 py-2">
-                      <button
-                        onClick={() => { setUserMenuOpen(false); handleLogout(); }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
-                          <LogOut className="w-4 h-4 text-red-500" />
-                        </div>
-                        Logout
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* MOBILE NAV — same dark bg                                             */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {mobileMenuOpen && (
-        <>
-          <div className="fixed inset-0 bg-black/60 z-30 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
-          <div
-            className="fixed left-0 right-0 z-30 lg:hidden max-h-[75vh] overflow-y-auto shadow-2xl"
-            style={{ top: 75, background: '#0f172a', borderBottom: '3px solid #ea580c' }}
+          {/* Profile Menu */}
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={handleProfileMenuClose}
+            onClick={handleProfileMenuClose}
+            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            PaperProps={{
+              sx: {
+                mt: 1.5,
+                minWidth: 200,
+                borderRadius: 2,
+                boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
+                '& .MuiMenuItem-root': {
+                  px: 2,
+                  py: 1,
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                  },
+                },
+              },
+            }}
           >
-            <nav className="px-4 py-3 space-y-1">
-              {NAV_ITEMS.map(item => {
-                const active = isActive(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all"
-                    style={
-                      active
-                        ? { color: '#fb923c', background: 'rgba(251,146,60,0.15)' }
-                        : { color: '#e2e8f0' }
-                    }
-                  >
-                    <item.icon className="w-5 h-5" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-        </>
-      )}
-    </>
+            <MenuItem>Profile</MenuItem>
+            <MenuItem>My Account</MenuItem>
+            <MenuItem>Settings</MenuItem>
+            <MenuItem sx={{ color: 'error.main' }}>Logout</MenuItem>
+          </Menu>
+
+          {/* Mobile Menu */}
+          <Menu
+            anchorEl={mobileMenuAnchor}
+            open={Boolean(mobileMenuAnchor)}
+            onClose={handleMobileMenuClose}
+            onClick={handleMobileMenuClose}
+            transformOrigin={{ horizontal: 'left', vertical: 'top' }}
+            anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+            PaperProps={{
+              sx: {
+                mt: 1.5,
+                minWidth: 250,
+                borderRadius: 2,
+                boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
+              },
+            }}
+          >
+            {menuItems.map((item) => (
+              <MenuItem 
+                key={item.id} 
+                onClick={() => {
+                  handleMenuClick(item.id);
+                  handleMobileMenuClose();
+                }}
+                selected={activeMenu === item.id}
+                sx={{
+                  py: 1.5,
+                  '&.Mui-selected': {
+                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                    color: theme.palette.primary.main,
+                    '& .MuiSvgIcon-root': {
+                      color: theme.palette.primary.main,
+                    },
+                  },
+                }}
+              >
+                <Box component="span" sx={{ mr: 2, display: 'flex', alignItems: 'center' }}>
+                  {item.icon}
+                </Box>
+                {item.label}
+              </MenuItem>
+            ))}
+          </Menu>
+        </Toolbar>
+      </Container>
+    </StyledAppBar>
   );
-}
+};
+
+export default Header;
