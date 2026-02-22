@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
 
@@ -94,3 +96,4 @@ P.S. Most contractors see immediate value within the first week.`,
     );
   }
 }
+

@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model AdminUser {
@@ -43,6 +44,28 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+model CachedOpportunity {
+  id                  String    @id @default(cuid())
+  sam_notice_id       String    @unique          // ← REQUIRED for upsert — add @unique if missing
+  title               String
+  agency              String?
+  naics_code          String?
+  solicitation_number String?
+  opportunity_type    String?
+  set_aside           String?
+  posted_date         DateTime?
+  response_deadline   DateTime?
+  description         String?   @db.Text
+  contract_value      String?
+  url                 String?
+  active              Boolean   @default(true)
+  synced_at           DateTime?
+  created_at          DateTime  @default(now())
+
+  @@map("cached_opportunities")
+}
+
 
 model User {
   id                         String                      @id @default(cuid())
@@ -150,6 +173,7 @@ model Contractor {
   crm_activities    CrmActivity[]
   crm_tasks         CrmTask[]
   email_logs        EmailLog[]
+  is_test           Boolean       @default(false)
 
   @@map("contractors")
 }
@@ -448,6 +472,15 @@ model sam_cached_searches {
 
   @@index([expires_at])
   @@index([search_key])
+}
+
+model OpportunitySyncLog {
+  id         Int       @id @default(autoincrement())
+  count      Int?
+  naics_list String?
+  synced_at  DateTime?
+
+  @@map("opportunity_sync_log")
 }
 
 model saved_search_runs {

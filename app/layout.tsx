@@ -1,16 +1,9 @@
-//app/layout.tsx
+'use client';
 
-import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import { Toaster } from 'sonner';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
-
-export const metadata: Metadata = {
-  title: 'PreciseGovCon Admin Portal',
-  description: 'Enterprise platform for managing government contracting subscriptions and contractor outreach.',
-};
 
 export default function RootLayout({
   children,
@@ -20,8 +13,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        {children}
-        <Toaster position="top-right" richColors />
+        <main className="min-h-screen bg-slate-50">
+          {children}
+        </main>
       </body>
     </html>
   );

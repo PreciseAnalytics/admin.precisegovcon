@@ -1,54 +1,92 @@
-// app/api/outreach/stats/route.ts
+// app/api/sam/stats/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-export async function GET(request: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
-    await requireSession();
-
-    // Fetch real statistics from the database
     const [
-      totalContractors,
-      contactedCount,
-      enrolledCount,
+      total,
+      contacted,
+      enrolled,
+      inProgress,
+      hotLeads,
+      warmLeads,
+      syncLogs,
     ] = await Promise.all([
-      (prisma as any).contractors.count(),
-      (prisma as any).contractors.count({
-        where: { contacted: true },
-      }),
-      (prisma as any).contractors.count({
-        where: { enrolled: true },
+      prisma.contractor.count(),
+      prisma.contractor.count({ where: { contacted: true } }),
+      prisma.contractor.count({ where: { enrolled: true } }),
+      prisma.contractor.count({ where: { contacted: true, enrolled: false } }),
+      prisma.contractor.count({ where: { score: { gte: 70 } } }),
+      prisma.contractor.count({ where: { score: { gte: 45, lt: 70 } } }),
+      prisma.syncLog.findMany({
+        orderBy: { created_at: 'desc' },
+        take: 5,
+        select: {
+          contractors_synced: true,
+          new_contractors:    true,
+          status:             true,
+          duration_ms:        true,
+          created_at:         true,
+        },
       }),
     ]);
 
-    // Calculate in-progress (contacted but not enrolled)
-    const inProgress = await (prisma as any).contractors.count({
-      where: {
-        contacted: true,
-        enrolled: false,
-      },
+    // Pipeline stage breakdown
+    const stages = await prisma.contractor.groupBy({
+      by: ['pipeline_stage'],
+      _count: { id: true },
     });
 
-    // Calculate success rate
-    const successRate = contactedCount > 0 
-      ? (enrolledCount / contactedCount) * 100 
+    // Top states
+    const topStates = await prisma.contractor.groupBy({
+      by: ['state'],
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 10,
+      where: { state: { not: null } },
+    });
+
+    // Top NAICS
+    const topNaics = await prisma.contractor.groupBy({
+      by: ['naics_code'],
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 10,
+      where: { naics_code: { not: null } },
+    });
+
+    const successRate = contacted > 0
+      ? Number(((enrolled / contacted) * 100).toFixed(1))
       : 0;
 
-    const stats = {
-      totalContractors,
-      contacted: contactedCount,
-      enrolled: enrolledCount,
+    return NextResponse.json({
+      total,
+      contacted,
+      enrolled,
       inProgress,
       successRate,
-    };
-
-    return NextResponse.json(stats);
-  } catch (error) {
-    console.error('Error fetching outreach stats:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch stats' },
-      { status: 500 }
-    );
+      leadQuality: {
+        hot:  hotLeads,
+        warm: warmLeads,
+        cold: total - hotLeads - warmLeads,
+      },
+      stageBreakdown: stages.map((s) => ({
+        stage: s.pipeline_stage ?? 'unknown',
+        count: s._count.id,
+      })),
+      topStates: topStates.map((s) => ({
+        state: s.state,
+        count: s._count.id,
+      })),
+      topNaics: topNaics.map((n) => ({
+        naics: n.naics_code,
+        count: n._count.id,
+      })),
+      recentSyncs: syncLogs,
+    });
+  } catch (err: any) {
+    console.error('[SAM stats] Error:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

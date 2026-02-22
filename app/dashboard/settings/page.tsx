@@ -1,6 +1,7 @@
 //app/dashboard/settings/page.tsx
 
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, useRef } from 'react';
 import {

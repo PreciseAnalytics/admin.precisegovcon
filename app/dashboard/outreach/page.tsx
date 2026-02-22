@@ -1,6 +1,7 @@
-//app/dshboard/outreach/page.tsx
+//app/dashboard/outreach/page.tsx
 
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, useCallback } from 'react';
 import {
@@ -28,7 +29,7 @@ type ActivityType =
   | 'task_completed' | 'follow_up_scheduled';
 
 type TaskPriority = 'high' | 'medium' | 'low';
-type ActiveTab    = 'crm' | 'outreach' | 'opportunities' | 'templates' | 'offerCodes';
+type ActiveTab    = 'crm' | 'outreach' | 'opportunities' | 'templates' | 'offerCodes' | 'testData';
 type FilterView   = 'total' | 'contacted' | 'enrolled' | 'inProgress' | 'success';
 
 interface Contractor {
@@ -284,15 +285,31 @@ export default function OutreachPage() {
   const [testTarget,    setTestTarget]    = useState({ name: '', email: '', uei: '', cage: '', naics: '', state: '', bizType: 'Small Business' });
 
   // ── Outreach UI state ────────────────────────────────────────────────────────
-  const [selected,      setSelected]      = useState<Set<string>>(new Set());
-  const [searchTerm,    setSearchTerm]    = useState('');
-  const [showFilters,   setShowFilters]   = useState(false);
+  const [selected,            setSelected]            = useState<Set<string>>(new Set());
+  const [searchTerm,          setSearchTerm]          = useState('');
+  const [showFilters,         setShowFilters]         = useState(false);
+  const [testCount,           setTestCount]           = useState(0);
+  const [showTestContractors, setShowTestContractors] = useState(false);
+  const [testOnlyMode,        setTestOnlyMode]        = useState(false);
+  const [showAddTestOutreach, setShowAddTestOutreach] = useState(false);
+  const [newTestOutreach,     setNewTestOutreach]     = useState({ name: '', email: '', company: '', naics_code: '', state: 'VA', business_type: 'Small Business' });
   const [showTplPanel,  setShowTplPanel]  = useState(false);
   const [curTemplate,   setCurTemplate]   = useState<EmailTemplate | null>(null);
-  const [showSendModal, setShowSendModal] = useState(false);
+  const [showSendModal,   setShowSendModal]   = useState(false);
+  const [sendResult,      setSendResult]      = useState<{ sentCount: number; skipped: number; failed: number; message: string; testMode: boolean } | null>(null);
   const [selOpp,        setSelOpp]        = useState<Opportunity | null>(null);
   const [oppSearch,     setOppSearch]     = useState('');
   const [filters,       setFilters]       = useState<ContractorFilters>({ registrationDateFrom: '', registrationDateTo: '', naicsCodes: [], states: [], businessTypes: [], naicsInput: '' });
+
+  // ── Test companies state ────────────────────────────────────────────────────
+  const [testCompanies,     setTestCompanies]     = useState<Contractor[]>([]);
+  const [testCompaniesLoad, setTestCompaniesLoad] = useState(false);
+
+  // ── Opportunities state ─────────────────────────────────────────────────────
+  const [liveOpps,     setLiveOpps]     = useState<Opportunity[]>([]);
+  const [oppsLoading,  setOppsLoading]  = useState(false);
+  const [oppSyncSt,    setOppSyncSt]    = useState<'idle'|'syncing'|'ok'>('idle');
+  const [lastOppSync,  setLastOppSync]  = useState<string | null>(null);
 
   // ── Template / code modal state ──────────────────────────────────────────────
   const [editTpl,          setEditTpl]          = useState<EmailTemplate | null>(null);
@@ -340,52 +357,59 @@ export default function OutreachPage() {
   }, [crmSearch]);
 
   // ── Fetch outreach contractors ───────────────────────────────────────────────
-  const fetchContractors = useCallback(async () => {
+  const fetchContractors = useCallback(async (testOnlyOverride?: boolean) => {
     try {
       setLoading(true);
-      const filterParam =
-        filterView === 'contacted'  ? 'contacted'  :
-        filterView === 'enrolled'   ? 'enrolled'   :
-        filterView === 'inProgress' ? 'contacted'  : 'all';
 
-      const body: any = { filter: filterParam, search: searchTerm, page: 1, limit: 500 };
-      if (filters.registrationDateFrom) body.registrationDateFrom = filters.registrationDateFrom;
-      if (filters.registrationDateTo)   body.registrationDateTo   = filters.registrationDateTo;
-      if (filters.naicsCodes.length)    body.naicsCodes            = filters.naicsCodes;
-      if (filters.states.length)        body.states                = filters.states;
-      if (filters.businessTypes.length) body.businessTypes         = filters.businessTypes;
+      const params = new URLSearchParams();
+      params.set('page',  '1');
+      params.set('limit', '500');
+      const effectiveTestOnly = testOnlyOverride !== undefined ? testOnlyOverride : testOnlyMode;
+      params.set('showTest', String(showTestContractors || effectiveTestOnly));
+      if (effectiveTestOnly) params.set('testOnly', 'true');
 
-      const r = await fetch('/api/sam/contractors', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
-      });
+      if (searchTerm)                    params.set('search',        searchTerm);
+      if (filterView === 'enrolled')     params.set('enrolled',      'true');
+      if (filterView === 'contacted')    params.set('notContactedOnly', 'false');
+      if (filters.registrationDateFrom)  params.set('regDateFrom',   filters.registrationDateFrom);
+      if (filters.registrationDateTo)    params.set('regDateTo',     filters.registrationDateTo);
+      if (filters.naicsCodes.length)     params.set('naicsCodes',    filters.naicsCodes.join(','));
+      if (filters.states.length)         params.set('states',        filters.states.join(','));
+      if (filters.businessTypes.length)  params.set('businessTypes', filters.businessTypes.join(','));
+
+      const r = await fetch(`/api/outreach/contractors?${params}`);
+      if (!r.ok) throw new Error(`${r.status}`);
       const d = await r.json();
+
+      if (d.testCount !== undefined) setTestCount(d.testCount);
 
       const mapped = (d.contractors || []).map((c: any) => ({
         id:                c.id,
         name:              c.name || 'Unknown',
         email:             c.email || '',
-        sam_gov_id:        c.sam_gov_id || '',
+        sam_gov_id:        c.uei_number ? `SAM-${c.uei_number}` : '',
+        uei_number:        c.uei_number || '',
         naics_code:        c.naics_code || '',
         state:             c.state || '',
         business_type:     c.business_type || 'Small Business',
         registration_date: c.registration_date ? new Date(c.registration_date).toISOString().split('T')[0] : '',
-        contacted:         c.contacted || false,
-        enrolled:          c.enrolled  || false,
-        inProgress:        c.contacted && !c.enrolled,
+        contacted:         c.contacted  || false,
+        enrolled:          c.enrolled   || false,
+        inProgress:        c.contacted  && !c.enrolled,
         contact_attempts:  c.contact_attempts || 0,
         offer_code:        c.offer_code || '',
-        score:             c.score || 0,
+        score:             c.score      || 0,
         pipeline_stage:    c.pipeline_stage || 'new',
+        is_test:           c.is_test    || false,
       }));
       setContractors(mapped);
     } catch (e: any) {
       console.error('[fetchContractors]', e);
+      notify('Failed to load contractors', 'error');
     } finally {
       setLoading(false);
     }
-  }, [filterView, searchTerm, filters]);
+  }, [filterView, searchTerm, filters, showTestContractors, testOnlyMode]);
 
   // ── Fetch stats ──────────────────────────────────────────────────────────────
   const fetchStats = useCallback(async () => {
@@ -427,6 +451,73 @@ export default function OutreachPage() {
       }
     } catch (e) {}
   }, []);
+  // ── Fetch live opportunities from cache ─────────────────────────────────────
+  const fetchOpportunities = useCallback(async () => {
+    try {
+      setOppsLoading(true);
+      const r = await fetch('/api/opportunities/cached');
+      if (!r.ok) throw new Error(`${r.status}`);
+      const d = await r.json();
+      const mapped = (d.opportunities || []).map((o: any) => ({
+        id:                 o.id,
+        title:              o.title || 'Untitled',
+        agency:             o.agency || 'Federal Agency',
+        naicsCode:          o.naics_code || '',
+        postedDate:         o.posted_date ? o.posted_date.split('T')[0] : '',
+        responseDeadline:   o.response_deadline ? o.response_deadline.split('T')[0] : '',
+        value:              o.contract_value || 'TBD',
+        type:               o.opportunity_type || 'Solicitation',
+        setAside:           o.set_aside || '',
+        description:        o.description || '',
+        solicitationNumber: o.solicitation_number || '',
+        url:                o.url || 'https://sam.gov',
+      }));
+      setLiveOpps(mapped);
+      setLastOppSync(d.lastSync || null);
+    } catch (e) {
+      // Fall back to mock data silently — cache may be empty
+    } finally {
+      setOppsLoading(false);
+    }
+  }, []);
+
+  // ── Fetch test companies ────────────────────────────────────────────────────
+  const fetchTestCompanies = useCallback(async () => {
+    try {
+      setTestCompaniesLoad(true);
+      // Use testOnly=true — returns ONLY is_test records, no client-side filtering needed
+      const r = await fetch('/api/outreach/contractors?testOnly=true&showTest=true&limit=500');
+      if (!r.ok) throw new Error(`${r.status}`);
+      const d = await r.json();
+      const tests = d.contractors || [];
+      setTestCompanies(tests);
+      setTestCount(tests.length);
+    } catch (e) {
+      console.error('[fetchTestCompanies]', e);
+      notify('Failed to load test companies', 'error');
+    } finally {
+      setTestCompaniesLoad(false);
+    }
+  }, []);
+
+  const deleteTestContractor = async (id: string, name: string) => {
+    if (!confirm(`Delete test contractor "${name}"?`)) return;
+    try {
+      const r = await fetch(`/api/outreach/test-contractors/${id}`, { method: 'DELETE' });
+      if (r.ok) {
+        notify(`🗑️ Deleted ${name}`);
+        setTestCompanies(prev => prev.filter(c => c.id !== id));
+        setTestCount(prev => Math.max(0, prev - 1));
+        fetchContractors();
+      } else {
+        const d = await r.json();
+        notify(d.error || 'Failed to delete', 'error');
+      }
+    } catch {
+      notify('Delete failed', 'error');
+    }
+  };
+
   const fetchTemplates = useCallback(async () => {
     try {
       const res = await fetch('/api/outreach/templates');
@@ -436,8 +527,10 @@ export default function OutreachPage() {
       }
     } catch (err) { console.error('Failed to fetch templates:', err); }
   }, []);
-  useEffect(() => { fetchPipeline(); fetchActivities(); fetchTasks(); fetchStats(); fetchOfferCodes(); fetchTemplates(); }, []);
+  useEffect(() => { fetchPipeline(); fetchActivities(); fetchTasks(); fetchStats(); fetchOfferCodes(); fetchTemplates(); fetchOpportunities(); }, []);
   useEffect(() => { if (activeTab === 'outreach') fetchContractors(); }, [activeTab, fetchContractors]);
+  useEffect(() => { if (activeTab === 'opportunities') fetchOpportunities(); }, [activeTab, fetchOpportunities]);
+  useEffect(() => { if (activeTab === 'testData') fetchTestCompanies(); }, [activeTab, fetchTestCompanies]);
 
   // ── Load drawer detail data ──────────────────────────────────────────────────
   const openDrawer = async (c: Contractor) => {
@@ -618,6 +711,42 @@ export default function OutreachPage() {
     }
   };
 
+  // ── Test contractor helpers ──────────────────────────────────────────────────
+  const saveTestOutreachContractor = async () => {
+    if (!newTestOutreach.name || !newTestOutreach.email) {
+      notify('Name and email are required', 'error'); return;
+    }
+    const res = await fetch('/api/outreach/test-contractors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newTestOutreach),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      notify(`✅ ${data.message}`);
+      setShowAddTestOutreach(false);
+      setNewTestOutreach({ name: '', email: '', company: '', naics_code: '', state: 'VA', business_type: 'Small Business' });
+      setShowTestContractors(true);
+      fetchContractors();
+    } else {
+      notify(data.error || 'Failed to create test contractor', 'error');
+    }
+  };
+
+  const purgeTestContractors = async () => {
+    if (!confirm(`Permanently delete all ${testCount} test contractor(s)? This cannot be undone.`)) return;
+    const res = await fetch('/api/outreach/test-contractors', { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok) {
+      notify(`🗑️ Deleted ${data.deleted} test contractor(s)`);
+      setTestCount(0);
+      setShowTestContractors(false);
+      fetchContractors();
+    } else {
+      notify('Failed to purge test contractors', 'error');
+    }
+  };
+
   // ── Send emails ──────────────────────────────────────────────────────────────
   const sendEmails = async () => {
     if (!curTemplate || selected.size === 0) return;
@@ -627,15 +756,26 @@ export default function OutreachPage() {
       const r = await fetch('/api/outreach/send', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ contractors: toSend, template: curTemplate, personalizeEmails: true }),
+        body:    JSON.stringify({
+          contractors:      toSend,
+          template:         curTemplate,
+          personalizeEmails: true,
+          allowTestRecords: testOnlyMode,   // ← tell route to send to test contractors
+        }),
       });
       const d = await r.json();
-      if (d.success || d.sentCount > 0) {
-        notify(`✅ Sent to ${d.sentCount || d.sent} contractors`);
+      if (d.success !== false) {
+        setShowSendModal(false);
+        setSendResult({
+          sentCount: d.sentCount ?? 0,
+          skipped:   (d.results || []).filter((r: any) => r.status === 'skipped').length,
+          failed:    d.failedCount ?? 0,
+          message:   d.message || `Sent ${d.sentCount} email${d.sentCount !== 1 ? 's' : ''}`,
+          testMode:  testOnlyMode,
+        });
         setSelected(new Set());
         setCurTemplate(null);
         setShowTplPanel(false);
-        setShowSendModal(false);
         fetchContractors();
         fetchStats();
         fetchPipeline();
@@ -676,7 +816,8 @@ export default function OutreachPage() {
   }, {} as Record<PipelineStage, Contractor[]>);
 
   const now = new Date();
-  const filteredOpps = MOCK_OPPS.filter(o =>
+  const oppSource    = liveOpps.length > 0 ? liveOpps : MOCK_OPPS;
+  const filteredOpps = oppSource.filter(o =>
     !oppSearch ||
     o.title.toLowerCase().includes(oppSearch.toLowerCase()) ||
     o.agency.toLowerCase().includes(oppSearch.toLowerCase()) ||
@@ -736,17 +877,24 @@ export default function OutreachPage() {
                   try {
                     await fetch(`/api/sam/contractors?days=7&maxRecords=100`);
                     setSyncSt('ok');
-                    notify('Synced from SAM.gov');
+                    notify('SAM.gov sync complete — new contractors added');
                     fetchPipeline();
                     fetchStats();
+                    if (activeTab === 'outreach') fetchContractors();
                   } catch { setSyncSt('idle'); notify('Sync failed', 'error'); }
-                  setTimeout(() => setSyncSt('idle'), 3000);
+                  setTimeout(() => setSyncSt('idle'), 4000);
                 }}
                 disabled={syncSt === 'syncing'}
-                className="flex items-center gap-2 px-5 py-2.5 bg-white/10 border border-white/20 rounded-xl hover:bg-white/20 transition font-bold text-white text-sm backdrop-blur"
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-lg ${
+                  syncSt === 'ok'
+                    ? 'bg-emerald-500 text-white border border-emerald-400 shadow-emerald-500/30'
+                    : syncSt === 'syncing'
+                    ? 'bg-orange-500/30 border border-orange-400/50 text-orange-200 cursor-not-allowed'
+                    : 'bg-orange-500 hover:bg-orange-400 text-white border border-orange-400 shadow-orange-500/30'
+                }`}
               >
                 <RefreshCw className={`w-4 h-4 ${syncSt === 'syncing' ? 'animate-spin' : ''}`} />
-                {syncSt === 'syncing' ? 'Syncing...' : syncSt === 'ok' ? '✓ Synced' : 'Sync SAM.gov'}
+                {syncSt === 'syncing' ? 'Syncing SAM.gov...' : syncSt === 'ok' ? '✓ Sync Complete' : 'Sync SAM.gov'}
               </button>
             </div>
           </div>
@@ -759,6 +907,7 @@ export default function OutreachPage() {
               { id: 'opportunities',label: 'Opportunities',  icon: Target,    color: 'from-violet-500 to-violet-600' },
               { id: 'templates',    label: 'Templates',      icon: FileText,  color: 'from-amber-500 to-amber-600' },
               { id: 'offerCodes',   label: 'Offer Codes',    icon: Tag,       color: 'from-rose-500 to-rose-600' },
+              { id: 'testData',     label: 'Test Data',      icon: AlertTriangle, color: 'from-amber-500 to-amber-600' },
             ] as { id: ActiveTab; label: string; icon: any; color: string }[]).map(tab => (
               <button
                 key={tab.id}
@@ -1222,7 +1371,7 @@ export default function OutreachPage() {
                   onClick={async () => {
                     if (!testTarget.name || !testTarget.email) { notify('Name and email required', 'error'); return; }
                     try {
-                      const r = await fetch('/api/crm/pipeline', {
+                      const r = await fetch('/api/outreach/test-contractors', {
                         method:  'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body:    JSON.stringify({
@@ -1238,14 +1387,16 @@ export default function OutreachPage() {
                           notes:         'TEST RECORD — added manually via admin CRM',
                         }),
                       });
+                      const d = await r.json();
                       if (r.ok) {
-                        notify(`✅ ${testTarget.name} added to pipeline`);
+                        notify(`✅ ${testTarget.name} added as test contractor`);
                         setTestTarget({ name: '', email: '', uei: '', cage: '', naics: '', state: '', bizType: 'Small Business' });
                         setShowAddTest(false);
                         fetchPipeline();
+                        fetchTestCompanies();
+                        setTestCount(c => c + 1);
                       } else {
-                        const d = await r.json();
-                        notify(d.error || 'Failed — does /api/crm/pipeline support POST?', 'error');
+                        notify(d.error || 'Failed to create test company', 'error');
                       }
                     } catch { notify('Request failed', 'error'); }
                   }}
@@ -1408,6 +1559,57 @@ export default function OutreachPage() {
 
             {/* Contractor Table */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+
+              {/* ── Test Mode Toolbar ── */}
+              <div className={`px-5 py-3 flex items-center gap-3 flex-wrap border-b ${testOnlyMode ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
+                {/* Test Mode toggle — the main control */}
+                <button
+                  onClick={() => {
+                    const next = !testOnlyMode;
+                    setTestOnlyMode(next);
+                    setShowTestContractors(next);
+                    fetchContractors(next);
+                  }}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black border-2 transition-all ${
+                    testOnlyMode
+                      ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/30'
+                      : 'bg-white text-slate-600 border-slate-300 hover:border-amber-400 hover:text-amber-700'
+                  }`}
+                >
+                  <span className="text-base leading-none">🧪</span>
+                  {testOnlyMode ? 'TEST MODE ON — showing test IDs only' : 'Test Mode Off'}
+                </button>
+
+                {/* Add test contractor */}
+                <button
+                  onClick={() => setShowAddTestOutreach(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:border-amber-300 hover:text-amber-700 text-slate-500 rounded-xl text-xs font-bold transition"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Test Contractor
+                </button>
+
+                {/* Test count badge + purge */}
+                {testCount > 0 && (
+                  <>
+                    <span className="text-xs font-semibold text-amber-700 bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-lg">
+                      {testCount} test record{testCount !== 1 ? 's' : ''} in DB
+                    </span>
+                    <button
+                      onClick={purgeTestContractors}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-red-500 border border-red-200 rounded-xl text-xs font-bold hover:bg-red-50 hover:border-red-400 transition"
+                    >
+                      <Trash2 className="w-3 h-3" /> Purge All
+                    </button>
+                  </>
+                )}
+
+                <span className={`ml-auto text-xs font-semibold ${testOnlyMode ? 'text-amber-700' : 'text-slate-400'}`}>
+                  {testOnlyMode
+                    ? `Showing ${contractors.length} test contractor${contractors.length !== 1 ? 's' : ''} only`
+                    : `${contractors.length.toLocaleString()} contractors`}
+                </span>
+              </div>
+
               <div className={`px-6 py-4 border-b-2 ${cfg.sectionBorder} ${cfg.sectionBg}`}>
                 <div className="flex gap-3">
                   <div className="relative flex-1">
@@ -1486,7 +1688,7 @@ export default function OutreachPage() {
               </div>
 
               {visible.length > 0 && (
-                <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
+                <div className={`px-6 py-3 border-b flex items-center gap-3 ${testOnlyMode ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
                   <input
                     type="checkbox"
                     checked={selected.size === visible.length && visible.length > 0}
@@ -1494,6 +1696,11 @@ export default function OutreachPage() {
                     className="w-4 h-4 rounded border-slate-300 cursor-pointer"
                   />
                   <span className="text-xs font-semibold text-slate-600">{selected.size === visible.length ? 'Deselect All' : 'Select All'}</span>
+                  {testOnlyMode && (
+                    <span className="text-xs font-black text-amber-600 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-lg">
+                      🧪 TEST MODE — safe to send
+                    </span>
+                  )}
                   {selected.size > 0 && <span className="ml-auto text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">{selected.size} selected</span>}
                 </div>
               )}
@@ -1504,16 +1711,32 @@ export default function OutreachPage() {
                 </div>
               ) : visible.length === 0 ? (
                 <div className="px-6 py-16 text-center">
-                  <AlertCircle className="w-10 h-10 mx-auto mb-3 text-slate-200" />
-                  <p className="text-slate-500 font-semibold">No contractors in this view</p>
-                  <p className="text-sm text-slate-400 mt-1">Try a different filter or sync SAM.gov</p>
+                  {testOnlyMode ? (
+                    <>
+                      <div className="text-5xl mb-4">🧪</div>
+                      <p className="text-slate-700 font-bold text-base">No test contractors yet</p>
+                      <p className="text-sm text-slate-400 mt-1 mb-4">Add test contractors to run safe campaigns without touching real data</p>
+                      <button
+                        onClick={() => setShowAddTestOutreach(true)}
+                        className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold transition shadow-sm"
+                      >
+                        <Plus className="w-4 h-4 inline mr-1.5" />Add Test Contractor
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-10 h-10 mx-auto mb-3 text-slate-200" />
+                      <p className="text-slate-500 font-semibold">No contractors in this view</p>
+                      <p className="text-sm text-slate-400 mt-1">Try a different filter or sync SAM.gov</p>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100">
                   {visible.map(contractor => (
                     <div
                       key={contractor.id}
-                      className={`px-6 py-4 flex items-center gap-4 transition cursor-pointer hover:bg-slate-50 ${selected.has(contractor.id) ? cfg.sectionBg : ''}`}
+                      className={`px-6 py-4 flex items-center gap-4 transition cursor-pointer ${testOnlyMode ? 'hover:bg-amber-50/50' : 'hover:bg-slate-50'} ${selected.has(contractor.id) ? (testOnlyMode ? 'bg-amber-100/70' : cfg.sectionBg) : ''}`}
                       onClick={() => { const s = new Set(selected); s.has(contractor.id) ? s.delete(contractor.id) : s.add(contractor.id); setSelected(s); }}
                     >
                       <input type="checkbox" checked={selected.has(contractor.id)} onChange={() => {}} onClick={e => e.stopPropagation()} className="w-4 h-4 rounded border-slate-300 cursor-pointer flex-shrink-0" />
@@ -1522,6 +1745,9 @@ export default function OutreachPage() {
                           <span className="font-bold text-sm text-slate-900">{contractor.name}</span>
                           {contractor.business_type && (
                             <span className={`text-xs px-2 py-0.5 rounded-md font-semibold ${bizBadge(contractor.business_type)}`}>{contractor.business_type}</span>
+                          )}
+                          {(contractor as any).is_test && (
+                            <span className="text-xs px-2 py-0.5 rounded-md font-black bg-amber-100 text-amber-700 border border-amber-300">🧪 TEST</span>
                           )}
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">{contractor.email}</p>
@@ -1562,12 +1788,54 @@ export default function OutreachPage() {
           <div>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-2xl font-black text-slate-900">Live Federal Opportunities</h2>
-                <p className="text-sm text-slate-500 mt-1">SAM.gov solicitations matching your contractor base — updated daily</p>
+                <h2 className="text-2xl font-black text-slate-900">Federal Opportunities</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {liveOpps.length > 0
+                    ? <>Loaded from cache · {liveOpps.length} active · {lastOppSync ? `Last sync: ${new Date(lastOppSync).toLocaleDateString()}` : 'Sync to refresh'}</>
+                    : 'SAM.gov solicitations — connect cache for live results'}
+                </p>
               </div>
-              <button onClick={() => notify('Opportunities refreshed', 'info')} className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 bg-white hover:border-slate-300 transition">
-                <RefreshCw className="w-4 h-4" />Refresh
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchOpportunities}
+                  disabled={oppsLoading}
+                  className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 bg-white hover:border-slate-300 transition disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${oppsLoading ? 'animate-spin' : ''}`} />{oppsLoading ? 'Loading...' : 'Refresh'}
+                </button>
+                <button
+                  onClick={async () => {
+                    setOppSyncSt('syncing');
+                    try {
+                      const r = await fetch('/api/cron/sam-opportunity-sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET || ''}` },
+                        body: JSON.stringify({ limit: 200 }),
+                      });
+                      const d = await r.json();
+                      if (r.ok) {
+                        setOppSyncSt('ok');
+                        notify(`✅ Synced ${d.upserted || 0} opportunities from SAM.gov`);
+                        fetchOpportunities();
+                      } else {
+                        throw new Error(d.error || 'Sync failed');
+                      }
+                    } catch (e: any) { setOppSyncSt('idle'); notify(e.message || 'Sync failed', 'error'); }
+                    setTimeout(() => setOppSyncSt('idle'), 4000);
+                  }}
+                  disabled={oppSyncSt === 'syncing'}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition shadow-sm ${
+                    oppSyncSt === 'ok'
+                      ? 'bg-emerald-500 text-white border border-emerald-400'
+                      : oppSyncSt === 'syncing'
+                      ? 'bg-violet-400/50 text-white border border-violet-300 cursor-not-allowed'
+                      : 'bg-violet-600 hover:bg-violet-700 text-white border border-violet-500 shadow-violet-500/20'
+                  }`}
+                >
+                  <RefreshCw className={`w-4 h-4 ${oppSyncSt === 'syncing' ? 'animate-spin' : ''}`} />
+                  {oppSyncSt === 'syncing' ? 'Syncing SAM.gov...' : oppSyncSt === 'ok' ? '✓ Synced' : 'Sync from SAM.gov'}
+                </button>
+              </div>
             </div>
             <div className="relative mb-5">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1579,7 +1847,10 @@ export default function OutreachPage() {
               <span className="text-sm font-bold text-slate-700">{activeOpps.length} Live</span>
               <span className="w-1 h-1 rounded-full bg-slate-300" />
               {expiredOpps.length > 0 && <span className="text-sm font-semibold text-slate-400">{expiredOpps.length} Expired</span>}
-              <span className="ml-auto text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">⚠ Mock data — connect SAM.gov API for live results</span>
+              {liveOpps.length > 0
+                ? <span className="ml-auto text-xs text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">✓ Live cache data</span>
+                : <span className="ml-auto text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">⚠ Mock data — click "Sync from SAM.gov" to populate</span>
+              }
             </div>
               {(activeOpps.length > 0 ? activeOpps : filteredOpps).map(opp => {
                 const isSel = selOpp?.id === opp.id;
@@ -1844,6 +2115,155 @@ export default function OutreachPage() {
             </div>
           </div>
         )}
+
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {/* TEST DATA TAB                                                        */}
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'testData' && (
+          <div>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+                  <AlertTriangle className="w-6 h-6 text-amber-500" />
+                  Test Companies
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Flagged <span className="font-bold text-amber-600">🧪 TEST</span> — automatically skipped during live email campaigns. Safe to delete anytime.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowAddTest(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-amber-500/20"
+                >
+                  <Plus className="w-4 h-4" />Add Test Company
+                </button>
+                {testCompanies.length > 0 && (
+                  <button
+                    onClick={purgeTestContractors}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-white text-red-600 border-2 border-red-200 hover:border-red-400 hover:bg-red-50 rounded-xl text-sm font-bold transition"
+                  >
+                    <Trash2 className="w-4 h-4" />Purge All ({testCompanies.length})
+                  </button>
+                )}
+                <button
+                  onClick={fetchTestCompanies}
+                  className="p-2.5 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 transition"
+                >
+                  <RefreshCw className={`w-4 h-4 text-slate-500 ${testCompaniesLoad ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Warning banner */}
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-amber-800">Test records are excluded from live campaigns</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  The send route checks <code className="bg-amber-100 px-1 rounded font-mono">is_test = true</code> and
+                  skips those contractors. Use these records to safely test email templates, offer codes, and stage changes before going live.
+                </p>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <span className="font-black text-slate-900 text-sm">Test Contractors</span>
+                  <span className="ml-2 text-xs text-slate-400 font-medium">{testCompanies.length} record{testCompanies.length !== 1 ? 's' : ''}</span>
+                </div>
+              </div>
+
+              {testCompaniesLoad ? (
+                <div className="flex items-center justify-center py-16 text-slate-400">
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />Loading test companies...
+                </div>
+              ) : testCompanies.length === 0 ? (
+                <div className="py-16 text-center">
+                  <div className="text-5xl mb-4">🧪</div>
+                  <p className="text-slate-500 font-semibold">No test companies yet</p>
+                  <p className="text-sm text-slate-400 mt-1">Click "Add Test Company" to create one</p>
+                  <button
+                    onClick={() => setShowAddTest(true)}
+                    className="mt-4 px-4 py-2 bg-amber-500 text-white rounded-xl text-sm font-bold hover:bg-amber-600 transition"
+                  >
+                    <Plus className="w-4 h-4 inline mr-1" />Add Test Company
+                  </button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                        <th className="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Company</th>
+                        <th className="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Email</th>
+                        <th className="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
+                        <th className="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">NAICS</th>
+                        <th className="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">State</th>
+                        <th className="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Stage</th>
+                        <th className="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Created</th>
+                        <th className="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {testCompanies.map(c => {
+                        const stageKey = (c.pipeline_stage || 'new') as keyof typeof STAGES;
+                        const sc = STAGES[stageKey] || STAGES['new'];
+                        const SI = sc.icon;
+                        return (
+                          <tr key={c.id} className="hover:bg-amber-50/50 transition">
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-black bg-amber-100 text-amber-700 border border-amber-300 px-1.5 py-0.5 rounded">🧪</span>
+                                <span className="font-semibold text-sm text-slate-900">{c.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3.5 text-sm text-slate-500">{c.email}</td>
+                            <td className="px-5 py-3.5">
+                              {c.business_type
+                                ? <span className={`text-xs px-2 py-0.5 rounded-md font-semibold ${bizBadge(c.business_type)}`}>{c.business_type}</span>
+                                : <span className="text-slate-300">—</span>}
+                            </td>
+                            <td className="px-5 py-3.5 text-xs font-mono text-slate-500">{c.naics_code || '—'}</td>
+                            <td className="px-5 py-3.5 text-xs font-bold text-slate-500">{c.state || '—'}</td>
+                            <td className="px-5 py-3.5">
+                              <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-lg ${sc.bg} ${sc.color}`}>
+                                <SI className="w-3 h-3" />{sc.label}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5 text-xs text-slate-400">
+                              {c.created_at ? new Date(c.created_at as string).toLocaleDateString() : '—'}
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => openDrawer(c)}
+                                  className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold transition"
+                                >
+                                  View
+                                </button>
+                                <button
+                                  onClick={() => deleteTestContractor(c.id, c.name || 'this contractor')}
+                                  className="text-xs px-3 py-1.5 border border-red-200 rounded-lg text-red-600 hover:bg-red-50 hover:border-red-400 font-semibold transition"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* ── Solid Footer ──────────────────────────────────────────────────────── */}
@@ -2047,33 +2467,124 @@ export default function OutreachPage() {
       {/* ════════════════════════════════════════════════════════════════════════ */}
       {/* SEND CONFIRMATION MODAL                                                 */}
       {/* ════════════════════════════════════════════════════════════════════════ */}
+      {/* ── Send Confirmation Modal ─────────────────────────────────────────── */}
       {showSendModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-14 h-14 rounded-xl bg-blue-100 flex items-center justify-center"><Send className="w-7 h-7 text-blue-600" /></div>
-              <div>
-                <h3 className="font-black text-xl text-slate-900">Send Campaign?</h3>
-                <p className="text-sm text-slate-500">Sending {selected.size} personalized emails via Resend</p>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className={`px-8 pt-8 pb-6 ${testOnlyMode ? 'bg-amber-50' : 'bg-blue-50'}`}>
+              <div className="flex items-center gap-4">
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${testOnlyMode ? 'bg-amber-500' : 'bg-blue-600'} shadow-lg`}>
+                  <Send className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-black text-2xl text-slate-900">Send Campaign</h3>
+                  <p className="text-sm text-slate-500 mt-0.5">
+                    {testOnlyMode
+                      ? '🧪 Test mode — sending to test contractors only'
+                      : `${selected.size} personalized email${selected.size !== 1 ? 's' : ''} via Resend`}
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="space-y-3 mb-6">
+
+            {/* Details */}
+            <div className="px-8 py-6 space-y-3">
               {[
-                { label: 'Recipients', value: `${selected.size} contractors` },
-                { label: 'Template',   value: curTemplate?.name || '—' },
-                { label: 'Offer Code', value: curTemplate?.offerCode || 'None' },
-                { label: 'Personalized', value: 'Yes — company name, NAICS, business type' },
+                { label: 'Recipients',   value: `${selected.size} contractor${selected.size !== 1 ? 's' : ''}`, highlight: true },
+                { label: 'Template',     value: curTemplate?.name || '—' },
+                { label: 'Offer Code',   value: curTemplate?.offerCode || 'None' },
+                { label: 'Personalized', value: 'Yes — company, NAICS, business type' },
+                ...(testOnlyMode ? [{ label: 'Mode', value: '🧪 Test — real emails will be skipped', highlight: true }] : []),
               ].map(row => (
-                <div key={row.label} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                  <span className="text-sm font-medium text-slate-600">{row.label}</span>
-                  <span className="text-sm font-bold text-slate-900">{row.value}</span>
+                <div key={row.label} className={`flex items-center justify-between px-4 py-3 rounded-xl ${(row as any).highlight ? (testOnlyMode ? 'bg-amber-100 border border-amber-200' : 'bg-blue-100 border border-blue-200') : 'bg-slate-50'}`}>
+                  <span className="text-sm font-semibold text-slate-600">{row.label}</span>
+                  <span className={`text-sm font-bold ${(row as any).highlight ? (testOnlyMode ? 'text-amber-800' : 'text-blue-800') : 'text-slate-900'}`}>{row.value}</span>
                 </div>
               ))}
             </div>
-            <div className="flex gap-3">
-              <button onClick={() => setShowSendModal(false)} className="flex-1 px-4 py-3 border-2 border-slate-200 rounded-xl font-bold text-slate-700">Cancel</button>
-              <button onClick={sendEmails} disabled={sending} className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
-                {sending ? <><Loader2 className="w-4 h-4 animate-spin" />Sending...</> : <><Send className="w-4 h-4" />Send Now</>}
+
+            {/* Actions */}
+            <div className="px-8 pb-8 flex gap-3">
+              <button
+                onClick={() => setShowSendModal(false)}
+                className="flex-1 px-4 py-4 border-2 border-slate-200 rounded-2xl font-bold text-slate-700 hover:bg-slate-50 transition text-base"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={sendEmails}
+                disabled={sending}
+                className={`flex-1 px-4 py-4 rounded-2xl font-black text-white transition disabled:opacity-60 flex items-center justify-center gap-2 text-base shadow-lg ${
+                  testOnlyMode
+                    ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/30'
+                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/30'
+                }`}
+              >
+                {sending
+                  ? <><Loader2 className="w-5 h-5 animate-spin" />Sending...</>
+                  : <><Send className="w-5 h-5" />Send {selected.size} Email{selected.size !== 1 ? 's' : ''}</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Send Result Modal — static, user must close ──────────────────────── */}
+      {sendResult && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
+            {/* Success header */}
+            <div className={`px-8 pt-8 pb-6 ${sendResult.testMode ? 'bg-amber-50' : sendResult.sentCount > 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+              <div className="flex items-center gap-4">
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg text-3xl ${
+                  sendResult.testMode ? 'bg-amber-500' :
+                  sendResult.sentCount > 0 ? 'bg-emerald-500' : 'bg-red-500'
+                }`}>
+                  {sendResult.sentCount > 0 ? '✅' : '⚠️'}
+                </div>
+                <div>
+                  <h3 className="font-black text-2xl text-slate-900">
+                    {sendResult.sentCount > 0 ? 'Campaign Sent!' : 'Nothing Sent'}
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-0.5">{sendResult.message}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="px-8 py-6">
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-center">
+                  <div className="text-3xl font-black text-emerald-700">{sendResult.sentCount}</div>
+                  <div className="text-xs font-bold text-emerald-600 mt-1">Sent</div>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
+                  <div className="text-3xl font-black text-amber-700">{sendResult.skipped}</div>
+                  <div className="text-xs font-bold text-amber-600 mt-1">Skipped</div>
+                </div>
+                <div className={`rounded-2xl p-4 text-center border ${sendResult.failed > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className={`text-3xl font-black ${sendResult.failed > 0 ? 'text-red-700' : 'text-slate-400'}`}>{sendResult.failed}</div>
+                  <div className={`text-xs font-bold mt-1 ${sendResult.failed > 0 ? 'text-red-600' : 'text-slate-400'}`}>Failed</div>
+                </div>
+              </div>
+
+              {sendResult.skipped > 0 && (
+                <div className={`rounded-xl p-3 text-xs font-medium ${sendResult.testMode ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-slate-50 text-slate-500'}`}>
+                  {sendResult.testMode
+                    ? '🧪 In test mode, real contractor emails are still skipped by the send route. Use a non-test email address in your test contractor to receive actual emails.'
+                    : `${sendResult.skipped} recipient${sendResult.skipped !== 1 ? 's' : ''} were skipped (own domain, test records, or duplicates).`}
+                </div>
+              )}
+            </div>
+
+            {/* Close */}
+            <div className="px-8 pb-8">
+              <button
+                onClick={() => setSendResult(null)}
+                className="w-full px-4 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-base transition"
+              >
+                Done
               </button>
             </div>
           </div>
@@ -2194,6 +2705,72 @@ export default function OutreachPage() {
                 }}
                 className="flex-1 px-4 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-700 transition"
               >Save Template</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {/* ADD TEST OUTREACH CONTRACTOR MODAL                                       */}
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {showAddTestOutreach && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="font-black text-xl text-slate-900">Add Test Contractor</h3>
+                <p className="text-sm text-slate-500 mt-0.5">🧪 Flagged as TEST — skipped in real campaigns</p>
+              </div>
+              <button onClick={() => setShowAddTestOutreach(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Name *</label>
+                  <input type="text" value={newTestOutreach.name} onChange={e => setNewTestOutreach({ ...newTestOutreach, name: e.target.value })} placeholder="e.g. Test User" className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-amber-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Email *</label>
+                  <input type="email" value={newTestOutreach.email} onChange={e => setNewTestOutreach({ ...newTestOutreach, email: e.target.value })} placeholder="test@yourdomain.com" className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-amber-400" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Company</label>
+                <input type="text" value={newTestOutreach.company} onChange={e => setNewTestOutreach({ ...newTestOutreach, company: e.target.value })} placeholder="e.g. Precise Analytics LLC" className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-amber-400" />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">NAICS</label>
+                  <input type="text" value={newTestOutreach.naics_code} onChange={e => setNewTestOutreach({ ...newTestOutreach, naics_code: e.target.value })} placeholder="541512" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:border-amber-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">State</label>
+                  <input type="text" value={newTestOutreach.state} onChange={e => setNewTestOutreach({ ...newTestOutreach, state: e.target.value.toUpperCase().slice(0, 2) })} placeholder="VA" maxLength={2} className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:border-amber-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Type</label>
+                  <select value={newTestOutreach.business_type} onChange={e => setNewTestOutreach({ ...newTestOutreach, business_type: e.target.value })} className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-semibold text-slate-700 bg-white focus:outline-none">
+                    <option>Small Business</option>
+                    <option>SDVOSB</option>
+                    <option>WOSB</option>
+                    <option>8(a) Certified</option>
+                    <option>HUBZone</option>
+                    <option>Minority-Owned</option>
+                    <option>Veteran-Owned</option>
+                  </select>
+                </div>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700 font-medium">
+                ⚠️ This contractor will be flagged <strong>🧪 TEST</strong> and automatically skipped during real email campaigns. Purge all test records before going live.
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setShowAddTestOutreach(false)} className="flex-1 px-4 py-3 border-2 border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 transition">Cancel</button>
+              <button onClick={saveTestOutreachContractor} className="flex-1 px-4 py-3 bg-amber-500 text-white rounded-xl font-bold hover:bg-amber-600 transition shadow-lg shadow-amber-500/20">
+                Create Test Contractor
+              </button>
             </div>
           </div>
         </div>

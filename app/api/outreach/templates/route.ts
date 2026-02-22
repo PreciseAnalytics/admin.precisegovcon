@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 // app/api/outreach/templates/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';

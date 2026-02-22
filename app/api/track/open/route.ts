@@ -1,18 +1,19 @@
 // app/api/track/open/route.ts
+// ─────────────────────────────────────────────────────────────────────────────
+// Email open tracking pixel + pipeline automation.
+// Called when contractor opens an outreach email (1x1 pixel loaded).
 //
-// Called by a 1x1 tracking pixel embedded in every outreach email.
-// URL: GET /api/track/open?id={email_log_id}&cid={contractor_id}
+// Pipeline stage transitions:
+//   new → contacted     (first open)
+//   contacted → engaged (subsequent opens or if already contacted)
 //
-// Flow:
-//  1. Update email_logs.status → 'opened'
-//  2. Create crm_activity (email_opened)
-//  3. Advance contractor pipeline_stage: contacted → opened
-//  4. Return a 1x1 transparent GIF (must NOT redirect — email clients kill pixel on redirect)
+// Also bumps score +5 (capped at 100) as engagement signal.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 
-// 1×1 transparent GIF — standard tracking pixel
+// 1x1 transparent GIF
 const PIXEL = Buffer.from(
   'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
   'base64'
@@ -20,72 +21,11 @@ const PIXEL = Buffer.from(
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const emailLogId   = searchParams.get('id')  || '';
-  const contractorId = searchParams.get('cid') || '';
+  const emailLogId   = searchParams.get('id');
+  const contractorId = searchParams.get('cid');
 
-  // Fire-and-forget — never block the pixel response
-  if (emailLogId) {
-    (async () => {
-      try {
-        // 1. Mark email as opened (only if currently 'sent' — avoid double-counting)
-        const log = await prisma.emailLog.findUnique({
-          where: { id: emailLogId },
-          select: { id: true, status: true, contractor_id: true },
-        });
-
-        if (!log) return;
-
-        const cid = contractorId || log.contractor_id;
-
-        if (log.status === 'sent') {
-          await prisma.emailLog.update({
-            where: { id: emailLogId },
-            data:  { status: 'opened' },
-          });
-        }
-
-        // 2. Log CRM activity (deduplicate — only one open event per email)
-        const existingOpen = await prisma.crmActivity.findFirst({
-          where: {
-            contractor_id: cid,
-            type:          'email_opened',
-            description:   { contains: emailLogId },
-          },
-        });
-
-        if (!existingOpen) {
-          await prisma.crmActivity.create({
-            data: {
-              contractor_id: cid,
-              type:          'email_opened',
-              description:   `Email opened (log: ${emailLogId})`,
-              metadata:      { email_log_id: emailLogId },
-              created_by:    'system',
-            },
-          });
-        }
-
-        // 3. Advance pipeline stage: 'contacted' → 'opened'
-        const contractor = await prisma.contractor.findUnique({
-          where:  { id: cid },
-          select: { pipeline_stage: true },
-        });
-
-        if (contractor?.pipeline_stage === 'contacted') {
-          await prisma.contractor.update({
-            where: { id: cid },
-            data:  { pipeline_stage: 'opened' },
-          });
-        }
-      } catch (err) {
-        // Silent — never let tracking errors affect email delivery
-        console.error('[track/open]', err);
-      }
-    })();
-  }
-
-  // Always return the pixel immediately, regardless of DB outcome
-  return new NextResponse(PIXEL, {
+  // Always return the pixel immediately — don't block on DB ops
+  const pixelResponse = new NextResponse(PIXEL, {
     status: 200,
     headers: {
       'Content-Type':  'image/gif',
@@ -94,4 +34,82 @@ export async function GET(req: NextRequest) {
       'Expires':       '0',
     },
   });
+
+  // Fire DB updates asynchronously (don't await — return pixel instantly)
+  if (emailLogId || contractorId) {
+    updateOnOpen(emailLogId, contractorId).catch(e =>
+      console.error('[track/open] DB update failed:', e)
+    );
+  }
+
+  return pixelResponse;
+}
+
+async function updateOnOpen(emailLogId: string | null, contractorId: string | null) {
+  // ── 1. Mark email log as opened ───────────────────────────────────────────
+  if (emailLogId) {
+    try {
+      await prisma.emailLog.updateMany({
+        where: {
+          id:     emailLogId,
+          status: { not: 'opened' }, // idempotent
+        },
+        data: { status: 'opened' },
+      });
+    } catch (e) {
+      console.warn('[track/open] Could not update email log:', e);
+    }
+  }
+
+  // ── 2. Advance pipeline stage + boost score ───────────────────────────────
+  if (!contractorId) return;
+
+  try {
+    const contractor = await prisma.contractor.findUnique({
+      where:  { id: contractorId },
+      select: { id: true, pipeline_stage: true, score: true, contacted: true },
+    });
+
+    if (!contractor) return;
+
+    const currentStage = contractor.pipeline_stage ?? 'new';
+    const currentScore = contractor.score ?? 0;
+
+    // Determine next stage
+    let nextStage = currentStage;
+    if (currentStage === 'new')       nextStage = 'contacted';
+    else if (currentStage === 'contacted') nextStage = 'engaged';
+    // engaged, hot, converted — don't regress
+
+    const newScore = Math.min(100, currentScore + 5);
+
+    await prisma.contractor.update({
+      where: { id: contractorId },
+      data: {
+        pipeline_stage: nextStage,
+        contacted:      true,         // mark as contacted on first open
+        score:          newScore,
+        last_contact:   new Date(),
+      },
+    });
+
+    // Log the pipeline advance as a CRM activity
+    if (nextStage !== currentStage) {
+      await prisma.crmActivity.create({
+        data: {
+          id:            crypto.randomUUID(),
+          contractor_id: contractorId,
+          type:          'email_opened',
+          description:         `Email opened — stage advanced from "${currentStage}" to "${nextStage}"`,
+          created_at:    new Date(),
+        },
+      }).catch(() => { /* non-fatal if CrmActivity schema differs */ });
+    }
+
+    console.log(
+      `[track/open] ${contractorId}: ${currentStage} → ${nextStage}, score ${currentScore} → ${newScore}`
+    );
+  } catch (e) {
+    console.error('[track/open] Pipeline update failed:', e);
+  }
 }

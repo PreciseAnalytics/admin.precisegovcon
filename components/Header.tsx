@@ -1,27 +1,32 @@
-import React, { useState, MouseEvent } from 'react';
-import { 
-  AppBar, 
-  Toolbar, 
-  Typography, 
-  Button, 
-  IconButton, 
-  Avatar, 
-  Menu, 
-  MenuItem, 
-  Box, 
+import React, { useMemo, useState, MouseEvent } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  IconButton,
+  Avatar,
+  Menu,
+  MenuItem,
+  Box,
   Container,
   Badge,
   useTheme,
   alpha
 } from '@mui/material';
-import { 
+import {
   Menu as MenuIcon,
   NotificationsNone as NotificationsIcon,
   AccountCircle,
   Dashboard as DashboardIcon,
   People as PeopleIcon,
   Settings as SettingsIcon,
-  Assessment as AssessmentIcon
+  Assessment as AssessmentIcon,
+  CreditCard as CreditCardIcon,
+  Campaign as CampaignIcon,
+  HistoryEdu as HistoryEduIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 
@@ -29,19 +34,21 @@ interface NavButtonProps {
   active?: boolean;
 }
 
-// Define menu item type
-interface MenuItem {
+interface NavItem {
   id: string;
   label: string;
+  href: string;
   icon: JSX.Element;
 }
 
-// Styled components for modern look
+const HEADER_BG = '#1e3a8a'; // lighter solid blue
+const HEADER_BG_2 = '#1d4ed8'; // slight accent for subtle depth
+
 const StyledAppBar = styled(AppBar)(({ theme }) => ({
-  background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`,
-  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-  backdropFilter: 'blur(10px)',
-  borderBottom: `1px solid ${alpha(theme.palette.common.white, 0.1)}`,
+  background: `linear-gradient(180deg, ${HEADER_BG_2} 0%, ${HEADER_BG} 100%)`,
+  boxShadow: '0 6px 24px rgba(0, 0, 0, 0.18)',
+  borderBottom: `1px solid ${alpha(theme.palette.common.white, 0.14)}`,
+  backdropFilter: 'none',
 }));
 
 const LogoContainer = styled(Box)(({ theme }) => ({
@@ -49,47 +56,52 @@ const LogoContainer = styled(Box)(({ theme }) => ({
   alignItems: 'center',
   gap: theme.spacing(1),
   cursor: 'pointer',
+  userSelect: 'none',
   '&:hover': {
-    opacity: 0.9,
+    opacity: 0.95,
   },
 }));
 
 const LogoDot = styled(Box)(({ theme }) => ({
-  width: 8,
-  height: 8,
+  width: 10,
+  height: 10,
   borderRadius: '50%',
-  background: theme.palette.secondary.main,
-  marginLeft: 4,
+  background: '#fb923c', // orange
+  marginLeft: 6,
+  boxShadow: '0 0 0 3px rgba(255,255,255,0.18)',
 }));
 
 const NavButton = styled(Button)<NavButtonProps>(({ theme, active }) => ({
   color: theme.palette.common.white,
-  margin: theme.spacing(0, 0.5),
-  padding: theme.spacing(1, 2),
-  borderRadius: theme.spacing(1),
+  margin: theme.spacing(0, 0.6),
+  padding: theme.spacing(1.25, 2.1), // bigger
+  borderRadius: 14,
   textTransform: 'none',
-  fontSize: '1rem',
-  fontWeight: active ? 600 : 400,
-  backgroundColor: active ? alpha(theme.palette.common.white, 0.15) : 'transparent',
+  fontSize: '1.125rem', // ~18px (bigger)
+  fontWeight: active ? 900 : 800,
+  letterSpacing: '0.2px',
+  backgroundColor: active ? alpha(theme.palette.common.white, 0.18) : 'transparent',
+  border: `1px solid ${active ? alpha(theme.palette.common.white, 0.22) : 'transparent'}`,
   '&:hover': {
-    backgroundColor: alpha(theme.palette.common.white, 0.25),
-    transform: 'translateY(-2px)',
-    transition: 'all 0.2s ease',
+    backgroundColor: alpha(theme.palette.common.white, 0.22),
+    transform: 'translateY(-1px)',
+    transition: 'all 0.18s ease',
   },
   '& .MuiButton-startIcon': {
-    marginRight: theme.spacing(1),
-    color: active ? theme.palette.secondary.main : theme.palette.common.white,
+    marginRight: theme.spacing(1.1),
+    color: active ? '#fb923c' : theme.palette.common.white,
   },
 }));
 
 const IconButtonStyled = styled(IconButton)(({ theme }) => ({
   color: theme.palette.common.white,
-  backgroundColor: alpha(theme.palette.common.white, 0.1),
+  backgroundColor: alpha(theme.palette.common.white, 0.12),
   marginLeft: theme.spacing(1),
+  borderRadius: 12,
   '&:hover': {
     backgroundColor: alpha(theme.palette.common.white, 0.2),
-    transform: 'scale(1.05)',
-    transition: 'all 0.2s ease',
+    transform: 'scale(1.03)',
+    transition: 'all 0.18s ease',
   },
 }));
 
@@ -98,39 +110,47 @@ const ProfileContainer = styled(Box)(({ theme }) => ({
   alignItems: 'center',
   gap: theme.spacing(1),
   marginLeft: theme.spacing(2),
-  padding: theme.spacing(0.5, 1),
-  borderRadius: theme.spacing(3),
-  backgroundColor: alpha(theme.palette.common.white, 0.1),
+  padding: theme.spacing(0.75, 1.25),
+  borderRadius: 999,
+  backgroundColor: alpha(theme.palette.common.white, 0.12),
+  border: `1px solid ${alpha(theme.palette.common.white, 0.14)}`,
   cursor: 'pointer',
   '&:hover': {
-    backgroundColor: alpha(theme.palette.common.white, 0.2),
-    transition: 'all 0.2s ease',
+    backgroundColor: alpha(theme.palette.common.white, 0.18),
+    transition: 'all 0.18s ease',
   },
 }));
 
 const StyledAvatar = styled(Avatar)(({ theme }) => ({
-  width: 32,
-  height: 32,
-  border: `2px solid ${theme.palette.secondary.main}`,
+  width: 34,
+  height: 34,
+  border: `2px solid #fb923c`,
 }));
+
+function isActivePath(pathname: string, href: string) {
+  if (href === '/dashboard') return pathname === '/dashboard' || pathname.startsWith('/dashboard/');
+  return pathname === href || pathname.startsWith(href + '/');
+}
 
 const Header = () => {
   const theme = useTheme();
-  const [activeMenu, setActiveMenu] = useState<string>('dashboard');
+  const pathname = usePathname();
+
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState<null | HTMLElement>(null);
 
-  const menuItems: MenuItem[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
-    { id: 'analytics', label: 'Analytics', icon: <AssessmentIcon /> },
-    { id: 'team', label: 'Team', icon: <PeopleIcon /> },
-    { id: 'settings', label: 'Settings', icon: <SettingsIcon /> },
-  ];
-
-  const handleMenuClick = (menuId: string) => {
-    setActiveMenu(menuId);
-    // Add your navigation logic here
-  };
+  const navItems: NavItem[] = useMemo(
+    () => [
+      { id: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: <DashboardIcon /> },
+      { id: 'users', label: 'Users', href: '/dashboard/users', icon: <PeopleIcon /> },
+      { id: 'subscriptions', label: 'Subscriptions', href: '/dashboard/subscriptions', icon: <CreditCardIcon /> },
+      { id: 'outreach', label: 'Contractor Outreach', href: '/dashboard/outreach', icon: <CampaignIcon /> },
+      { id: 'audit', label: 'Audit Logs', href: '/dashboard/audit-logs', icon: <HistoryEduIcon /> },
+      { id: 'analytics', label: 'Analytics', href: '/dashboard/analytics', icon: <AssessmentIcon /> },
+      { id: 'settings', label: 'Settings', href: '/dashboard/settings', icon: <SettingsIcon /> },
+    ],
+    []
+  );
 
   const handleProfileMenuOpen = (event: MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -151,80 +171,99 @@ const Header = () => {
   return (
     <StyledAppBar position="sticky">
       <Container maxWidth="xl">
-        <Toolbar disableGutters sx={{ minHeight: { xs: 64, md: 72 } }}>
-          {/* Logo Section */}
-          <LogoContainer onClick={() => handleMenuClick('dashboard')}>
-            <Typography
-              variant="h5"
-              component="div"
-              sx={{
-                fontWeight: 700,
-                letterSpacing: '0.5px',
-                background: `linear-gradient(135deg, ${theme.palette.common.white} 0%, ${theme.palette.secondary.light} 100%)`,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}
-            >
-              Brand
-            </Typography>
-            <LogoDot />
-          </LogoContainer>
-
-          {/* Desktop Navigation */}
-          <Box sx={{ 
-            flexGrow: 1, 
-            display: { xs: 'none', md: 'flex' }, 
-            justifyContent: 'center',
-            gap: 1,
-            mx: 2 
-          }}>
-            {menuItems.map((item) => (
-              <NavButton
-                key={item.id}
-                startIcon={item.icon}
-                active={activeMenu === item.id}
-                onClick={() => handleMenuClick(item.id)}
+        <Toolbar disableGutters sx={{ minHeight: { xs: 70, md: 84 }, px: { xs: 1, md: 0 } }}>
+          {/* Logo */}
+          <Link href="/dashboard" style={{ textDecoration: 'none' }}>
+            <LogoContainer>
+              <Typography
+                variant="h5"
+                component="div"
+                sx={{
+                  fontWeight: 900,
+                  letterSpacing: '0.2px',
+                  color: 'white',
+                  textShadow: '0 2px 8px rgba(0,0,0,0.22)',
+                  fontSize: { xs: '1.35rem', sm: '1.7rem' },
+                  lineHeight: 1.1
+                }}
               >
-                {item.label}
-              </NavButton>
-            ))}
+                PreciseGovCon
+              </Typography>
+              <LogoDot />
+              <Typography
+                component="span"
+                sx={{
+                  ml: 1,
+                  display: { xs: 'none', lg: 'inline-flex' },
+                  fontSize: '0.95rem',
+                  fontWeight: 800,
+                  color: alpha(theme.palette.common.white, 0.85),
+                  border: `1px solid ${alpha(theme.palette.common.white, 0.16)}`,
+                  padding: '6px 10px',
+                  borderRadius: 999,
+                  background: alpha(theme.palette.common.white, 0.08)
+                }}
+              >
+                Admin Portal
+              </Typography>
+            </LogoContainer>
+          </Link>
+
+          {/* Desktop Nav */}
+          <Box
+            sx={{
+              flexGrow: 1,
+              display: { xs: 'none', lg: 'flex' },
+              justifyContent: 'center',
+              gap: 0.5,
+              mx: 2,
+              overflow: 'hidden',
+            }}
+          >
+            {navItems.map((item) => {
+              const active = isActivePath(pathname || '', item.href);
+              return (
+                <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
+                  <NavButton startIcon={item.icon} active={active} disableElevation>
+                    {item.label}
+                  </NavButton>
+                </Link>
+              );
+            })}
           </Box>
 
-          {/* Right Side Icons & Profile */}
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            {/* Mobile Menu Icon */}
+          {/* Right side */}
+          <Box sx={{ display: 'flex', alignItems: 'center', ml: 'auto' }}>
+            {/* Mobile Menu */}
             <IconButtonStyled
               size="large"
               edge="start"
-              color="inherit"
               aria-label="menu"
               onClick={handleMobileMenuOpen}
-              sx={{ display: { md: 'none' } }}
+              sx={{ display: { lg: 'none' } }}
             >
               <MenuIcon />
             </IconButtonStyled>
 
-            {/* Notification Icon */}
-            <IconButtonStyled size="large" color="inherit">
-              <Badge badgeContent={4} color="secondary">
+            {/* Notifications */}
+            <IconButtonStyled size="large" aria-label="notifications">
+              <Badge badgeContent={4} color="warning">
                 <NotificationsIcon />
               </Badge>
             </IconButtonStyled>
 
-            {/* Profile Section */}
+            {/* Profile */}
             <ProfileContainer onClick={handleProfileMenuOpen}>
-              <StyledAvatar 
-                alt="John Doe" 
-                src="/path-to-avatar.jpg"
-              >
+              <StyledAvatar alt="Admin" src="/path-to-avatar.jpg">
                 <AccountCircle />
               </StyledAvatar>
+
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-                <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 600 }}>
-                  John Doe
-                </Typography>
-                <Typography variant="caption" sx={{ color: alpha(theme.palette.common.white, 0.7) }}>
+                <Typography sx={{ color: 'white', fontWeight: 900, fontSize: '1.02rem', lineHeight: 1.1 }}>
                   Admin
+                </Typography>
+                <Typography sx={{ color: alpha(theme.palette.common.white, 0.78), fontWeight: 800, fontSize: '0.82rem' }}>
+                  System Administrator
                 </Typography>
               </Box>
             </ProfileContainer>
@@ -241,14 +280,17 @@ const Header = () => {
             PaperProps={{
               sx: {
                 mt: 1.5,
-                minWidth: 200,
-                borderRadius: 2,
-                boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
+                minWidth: 220,
+                borderRadius: 3,
+                boxShadow: '0 12px 28px rgba(0,0,0,0.18)',
+                overflow: 'hidden',
                 '& .MuiMenuItem-root': {
                   px: 2,
-                  py: 1,
+                  py: 1.2,
+                  fontSize: '1rem',
+                  fontWeight: 800,
                   '&:hover': {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                    backgroundColor: alpha(theme.palette.primary.main, 0.08),
                   },
                 },
               },
@@ -260,7 +302,7 @@ const Header = () => {
             <MenuItem sx={{ color: 'error.main' }}>Logout</MenuItem>
           </Menu>
 
-          {/* Mobile Menu */}
+          {/* Mobile Nav Menu */}
           <Menu
             anchorEl={mobileMenuAnchor}
             open={Boolean(mobileMenuAnchor)}
@@ -271,37 +313,41 @@ const Header = () => {
             PaperProps={{
               sx: {
                 mt: 1.5,
-                minWidth: 250,
-                borderRadius: 2,
-                boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
+                minWidth: 280,
+                borderRadius: 3,
+                boxShadow: '0 12px 28px rgba(0,0,0,0.18)',
+                overflow: 'hidden',
               },
             }}
           >
-            {menuItems.map((item) => (
-              <MenuItem 
-                key={item.id} 
-                onClick={() => {
-                  handleMenuClick(item.id);
-                  handleMobileMenuClose();
-                }}
-                selected={activeMenu === item.id}
-                sx={{
-                  py: 1.5,
-                  '&.Mui-selected': {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                    color: theme.palette.primary.main,
-                    '& .MuiSvgIcon-root': {
+            {navItems.map((item) => {
+              const active = isActivePath(pathname || '', item.href);
+              return (
+                <MenuItem
+                  key={item.id}
+                  component={Link}
+                  href={item.href}
+                  selected={active}
+                  sx={{
+                    py: 1.4,
+                    fontSize: '1.05rem',
+                    fontWeight: 900,
+                    '&.Mui-selected': {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.08),
                       color: theme.palette.primary.main,
+                      '& .MuiSvgIcon-root': {
+                        color: theme.palette.primary.main,
+                      },
                     },
-                  },
-                }}
-              >
-                <Box component="span" sx={{ mr: 2, display: 'flex', alignItems: 'center' }}>
-                  {item.icon}
-                </Box>
-                {item.label}
-              </MenuItem>
-            ))}
+                  }}
+                >
+                  <Box component="span" sx={{ mr: 2, display: 'flex', alignItems: 'center' }}>
+                    {item.icon}
+                  </Box>
+                  {item.label}
+                </MenuItem>
+              );
+            })}
           </Menu>
         </Toolbar>
       </Container>

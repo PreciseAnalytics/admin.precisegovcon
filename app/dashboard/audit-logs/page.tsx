@@ -1,6 +1,7 @@
 //code app/dashboard/audit-logs/page.tsx
 
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Filter, FileText, User } from 'lucide-react';

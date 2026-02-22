@@ -1,0 +1,20 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sam-sync",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/opportunity-sync",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/opportunity-digest",
+      "schedule": "0 8 * * 2"
+    },
+    {
+      "path": "/api/cron/trial-reminders",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}

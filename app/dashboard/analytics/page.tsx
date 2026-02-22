@@ -1,6 +1,7 @@
 //code app/dashboard/analytics/page.tsx
 
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { Users, CreditCard, DollarSign, TrendingUp, Activity, UserCheck, Info } from 'lucide-react';

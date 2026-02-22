@@ -1,4 +1,7 @@
 // app/api/outreach/contractors/route.ts
+
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -16,20 +19,31 @@ export async function GET(request: NextRequest) {
 
     // ── Campaign Filters ───────────────────────────────────────────────────
     const search            = searchParams.get('search')            || '';
-    const states            = searchParams.get('states')            || '';   // comma-separated
-    const naicsCodes        = searchParams.get('naicsCodes')        || '';   // comma-separated
-    const businessTypes     = searchParams.get('businessTypes')     || '';   // comma-separated
-    const pipelineStages    = searchParams.get('pipelineStages')    || '';   // comma-separated
-    const regDateFrom       = searchParams.get('regDateFrom')       || '';   // YYYY-MM-DD
-    const regDateTo         = searchParams.get('regDateTo')         || '';   // YYYY-MM-DD
+    const states            = searchParams.get('states')            || '';
+    const naicsCodes        = searchParams.get('naicsCodes')        || '';
+    const businessTypes     = searchParams.get('businessTypes')     || '';
+    const pipelineStages    = searchParams.get('pipelineStages')    || '';
+    const regDateFrom       = searchParams.get('regDateFrom')       || '';
+    const regDateTo         = searchParams.get('regDateTo')         || '';
     const notContactedOnly  = searchParams.get('notContactedOnly')  === 'true';
     const minScore          = searchParams.get('minScore')          ? parseInt(searchParams.get('minScore')!) : undefined;
     const maxScore          = searchParams.get('maxScore')          ? parseInt(searchParams.get('maxScore')!) : undefined;
-    const priority          = searchParams.get('priority')          || '';   // high | medium | low
-    const enrolledFilter    = searchParams.get('enrolled');                  // 'true' | 'false' | ''
+    const priority          = searchParams.get('priority')          || '';
+    const enrolledFilter    = searchParams.get('enrolled');
+    const showTest  = searchParams.get('showTest')  === 'true';
+    const testOnly  = searchParams.get('testOnly')  === 'true';
 
     // ── Build WHERE clause ─────────────────────────────────────────────────
     const where: any = {};
+
+    if (testOnly) {
+      // Test Mode: show ONLY test contractors
+      where.is_test = true;
+    } else if (!showTest) {
+      // Normal mode: hide test contractors (default)
+      where.is_test = false;
+    }
+    // showTest=true && testOnly=false: show all including test (mixed view)
 
     if (search) {
       where.OR = [
@@ -115,10 +129,14 @@ export async function GET(request: NextRequest) {
           revenue:           true,
           last_contact:      true,
           created_at:        true,
+          is_test:           true,   // ← NEW
         },
       }),
       prisma.contractor.count({ where }),
     ]);
+
+    // Count test contractors separately for the UI badge
+    const testCount = await prisma.contractor.count({ where: { is_test: true } });
 
     return NextResponse.json({
       contractors,
@@ -131,11 +149,30 @@ export async function GET(request: NextRequest) {
       filters: {
         search, states, naicsCodes, businessTypes,
         pipelineStages, regDateFrom, regDateTo,
-        notContactedOnly, minScore, maxScore, priority, enrolledFilter,
+        notContactedOnly, minScore, maxScore, priority, enrolledFilter, showTest,
       },
+      testCount,
     });
   } catch (error) {
     console.error('Error fetching contractors:', error);
     return NextResponse.json({ error: 'Failed to fetch contractors' }, { status: 500 });
+  }
+}
+
+// ── DELETE: Remove all test contractors ──────────────────────────────────────
+export async function DELETE(request: NextRequest) {
+  try {
+    await requireSession();
+    const { searchParams } = new URL(request.url);
+
+    if (searchParams.get('purgeTest') === 'true') {
+      const { count } = await prisma.contractor.deleteMany({ where: { is_test: true } });
+      return NextResponse.json({ success: true, deleted: count });
+    }
+
+    return NextResponse.json({ error: 'Invalid operation' }, { status: 400 });
+  } catch (error) {
+    console.error('Error deleting test contractors:', error);
+    return NextResponse.json({ error: 'Failed to delete test contractors' }, { status: 500 });
   }
 }

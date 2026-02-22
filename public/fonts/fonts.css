@@ -1,0 +1,7 @@
+/* public/fonts/fonts.css */
+/* Using system fonts instead of Aptos */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Optional: If you want to keep the Aptos definitions but they'll fall back to system fonts */

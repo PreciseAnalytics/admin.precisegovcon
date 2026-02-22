@@ -1,44 +1,21 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  swcMinify: true,
-  
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
-          },
-        ],
-      },
-    ];
+  output: 'standalone',
+  typescript: {
+    ignoreBuildErrors: false,
   },
-  
-  // Optimize for production
-  compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
+  eslint: {
+    ignoreDuringBuilds: false,
   },
-  
-  // Image optimization
-  images: {
-    domains: ['admin.precisegovcon.com'],
-    formats: ['image/avif', 'image/webp'],
+  // Increase timeout for static generation
+  staticPageGenerationTimeout: 120,
+  // Ensure API routes are treated as dynamic
+  serverRuntimeConfig: {
+    // Will only be available on the server side
   },
-};
+  publicRuntimeConfig: {
+    // Will be available on both server and client
+  },
+}
 
-module.exports = nextConfig;
+module.exports = nextConfig

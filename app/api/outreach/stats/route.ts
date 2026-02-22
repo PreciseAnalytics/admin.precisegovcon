@@ -1,4 +1,7 @@
+export const dynamic = 'force-dynamic';
+
 // app/api/outreach/stats/route.ts
+// Fixed: excludes is_test contractors, returns successRate field the UI expects
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
@@ -12,61 +15,56 @@ export async function GET(request: NextRequest) {
       totalContractors,
       contactedCount,
       enrolledCount,
-      inProgress,
+      inProgressCount,
       totalEmailsSent,
       totalEmailsOpened,
       totalEmailsFailed,
-      recentEmailLogs,
     ] = await Promise.all([
-      prisma.contractor.count(),
-      prisma.contractor.count({ where: { contacted: true } }),
-      prisma.contractor.count({ where: { enrolled: true } }),
-      prisma.contractor.count({ where: { contacted: true, enrolled: false } }),
+      // ── Exclude test records from all stats ────────────────────────────────
+      prisma.contractor.count({ where: { is_test: false } }),
+      prisma.contractor.count({ where: { is_test: false, contacted: true } }),
+      prisma.contractor.count({ where: { is_test: false, enrolled:  true } }),
+      prisma.contractor.count({ where: { is_test: false, contacted: true, enrolled: false } }),
+
+      // ── Email log counts (these are naturally real since test contractors
+      //    are skipped by the send route anyway) ──────────────────────────────
       prisma.emailLog.count({ where: { status: { in: ['sent', 'delivered', 'opened'] } } }),
       prisma.emailLog.count({ where: { status: 'opened' } }),
       prisma.emailLog.count({ where: { status: 'failed' } }),
-      // Last 10 email logs for activity feed
-      prisma.emailLog.findMany({
-        take: 10,
-        orderBy: { sent_at: 'desc' },
-        include: {
-          contractor: {
-            select: { id: true, name: true, email: true },
-          },
-        },
-      }),
     ]);
 
-    const conversionRate = contactedCount > 0
-      ? (enrolledCount / contactedCount) * 100
+    // successRate = enrolled / contacted × 100  (what the UI pill reads as)
+    const successRate = contactedCount > 0
+      ? Math.round((enrolledCount / contactedCount) * 100)
       : 0;
 
+    const conversionRate = successRate; // alias kept for any other consumers
+
     const emailOpenRate = totalEmailsSent > 0
-      ? (totalEmailsOpened / totalEmailsSent) * 100
+      ? Math.round((totalEmailsOpened / totalEmailsSent) * 100)
       : 0;
 
     const emailDeliveryRate = (totalEmailsSent + totalEmailsFailed) > 0
-      ? (totalEmailsSent / (totalEmailsSent + totalEmailsFailed)) * 100
+      ? Math.round((totalEmailsSent / (totalEmailsSent + totalEmailsFailed)) * 100)
       : 0;
 
     return NextResponse.json({
       totalContractors,
-      contacted: contactedCount,
-      enrolled: enrolledCount,
-      inProgress,
-      conversionRate,
-      // Email tracking stats
+      contacted:   contactedCount,
+      enrolled:    enrolledCount,
+      inProgress:  inProgressCount,
+      successRate,          // ← the UI reads stats.successRate for the pill
+      conversionRate,       // ← keep for other consumers
       emailStats: {
-        totalSent: totalEmailsSent,
-        totalOpened: totalEmailsOpened,
-        totalFailed: totalEmailsFailed,
-        openRate: emailOpenRate,
+        totalSent:    totalEmailsSent,
+        totalOpened:  totalEmailsOpened,
+        totalFailed:  totalEmailsFailed,
+        openRate:     emailOpenRate,
         deliveryRate: emailDeliveryRate,
       },
-      recentEmailLogs,
     });
   } catch (error) {
-    console.error('Error fetching outreach stats:', error);
+    console.error('[outreach/stats]', error);
     return NextResponse.json({ error: 'Failed to fetch stats' }, { status: 500 });
   }
 }

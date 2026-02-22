@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 //code app/api/analytics/route.ts
 import { NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
@@ -89,3 +91,4 @@ export async function GET() {
     );
   }
 }
+
