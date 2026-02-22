@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
               <li>✅ NAICS-matched bid opportunities</li>
               <li>✅ Full CRM and pipeline management</li>
             </ul>
-            <a href="${SITE_URL}/upgrade?email=${encodeURIComponent(c.email!)}"
+            <a href="${SITE_URL}/login?email=${encodeURIComponent(c.email!)}&extend=true"
                style="display:inline-block;padding:14px 28px;background:#ea580c;color:#fff;font-weight:800;border-radius:8px;text-decoration:none;margin-top:16px;">
               Upgrade Before Your Trial Ends →
             </a>
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
             <h2 style="color:#1e293b;">Hi ${c.name},</h2>
             <p>Your free trial has ended, but we don't want you to miss out.</p>
             <p>We're offering you a <strong>7-day extension</strong> — completely free — to give you more time to see how PreciseGovCon can help you win federal contracts.</p>
-            <a href="${SITE_URL}/extend-trial?email=${encodeURIComponent(c.email!)}"
+            <a href="${SITE_URL}/login?email=${encodeURIComponent(c.email!)}&extend=true"
                style="display:inline-block;padding:14px 28px;background:#ea580c;color:#fff;font-weight:800;border-radius:8px;text-decoration:none;margin-top:16px;">
               Claim Your 7-Day Extension →
             </a>
