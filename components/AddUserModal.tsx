@@ -124,7 +124,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
-        <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100">
+        <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-100">
 
           {/* Green header */}
           <div className="bg-gradient-to-r from-emerald-500 to-green-600 px-10 py-10 text-center">
@@ -205,7 +205,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
 
-      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[95vh] overflow-y-auto border border-slate-100">
+      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-y-auto border border-slate-100">
 
         {/* Header */}
         <div className="sticky top-0 z-10 bg-white flex items-center justify-between px-8 py-5 border-b border-slate-100 rounded-t-3xl">
