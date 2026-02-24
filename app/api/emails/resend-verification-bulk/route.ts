@@ -1,99 +1,118 @@
+// app/api/emails/resend-verification-bulk/route.ts 
+// FIXED: Uses prisma.user (singular) and sends to /activate not /verify-email.
+
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { sendEmailVerificationEmail } from '@/lib/email';
-import { generateVerificationToken } from '@/lib/auth';
+import { requireSession } from '@/lib/auth';
+import prisma from '@/lib/prisma';
+import { sendAdminCreatedUserActivationEmail } from '@/lib/email';
+import crypto from 'crypto';
 
 export async function POST(req: NextRequest) {
+  try {
+    await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const { userIds } = await req.json();
 
     if (!Array.isArray(userIds) || userIds.length === 0) {
-      return NextResponse.json(
-        { error: 'Invalid userIds array' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Invalid userIds array' }, { status: 400 });
     }
 
-    // Find all unverified users with matching IDs
+    if (userIds.length > 50) {
+      return NextResponse.json({ error: 'Maximum 50 users per bulk send' }, { status: 400 });
+    }
+
+    // Find users who have NOT yet activated (no email_verified)
     const users = await prisma.user.findMany({
       where: {
-        id: { in: userIds },
+        id:             { in: userIds },
         email_verified: null,
+      },
+      select: {
+        id:         true,
+        email:      true,
+        name:       true,
+        firstName:  true,
+        company:    true,
+        plan_tier:  true,
       },
     });
 
     if (users.length === 0) {
       return NextResponse.json(
-        { error: 'No unverified users found' },
+        { error: 'No pending (unactivated) users found in the provided IDs.' },
         { status: 400 }
       );
     }
 
-    let sentCount = 0;
-    let failedCount = 0;
+    const mainAppUrl  = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://precisegovcon.com';
+    let sentCount     = 0;
+    let failedCount   = 0;
+    const failures: string[] = [];
 
-    // Send verification emails to all users
     for (const user of users) {
       try {
-        // Generate new verification token
-        const verificationToken = generateVerificationToken();
-        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        // Invalidate old tokens
+        await prisma.email_verification_tokens.deleteMany({
+          where: { user_id: user.id },
+        }).catch(() => {});
 
-        // Update user with new token
-        await prisma.user.update({
-          where: { id: user.id },
+        const rawToken  = crypto.randomBytes(32).toString('hex');
+        const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+        const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+
+        await prisma.email_verification_tokens.create({
           data: {
-            email_verification_token: verificationToken,
-            email_verification_expires: expiresAt,
+            id:         crypto.randomUUID(),
+            user_id:    user.id,
+            token_hash: tokenHash,
+            expires_at: expiresAt,
           },
         });
 
-        // Send verification email
-        const firstName = user.firstName || user.name?.split(' ')[0] || 'User';
-        const verificationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${verificationToken}`;
+        const activationUrl =
+          `${mainAppUrl}/activate` +
+          `?token=${rawToken}` +
+          `&email=${encodeURIComponent(user.email)}`;
 
-        await sendEmailVerificationEmail({
-          email: user.email,
+        const firstName = user.firstName || user.name?.split(' ')[0] || 'there';
+
+        await sendAdminCreatedUserActivationEmail({
+          to:        user.email,
           firstName,
-          company: user.company || undefined,
-          verificationUrl,
-          expiresIn: '7 days',
-        }).catch((err) => {
-          console.error(`Failed to send verification email to ${user.email}:`, err);
-          failedCount++;
-          throw err; // Will be caught by outer catch
+          company:   user.company ?? undefined,
+          activationUrl,
+          planTier:  user.plan_tier || 'FREE',
+          expiresIn: '72 hours',
         });
 
-        // Log action (optional - may not have audit log table)
-        try {
-          // Commented out until audit log implementation is complete
-          // await prisma.auditLog.create({...});
-        } catch (err) {
-          // Silently fail if audit logging not available
-          console.error('Audit log error:', err);
-        }
-
         sentCount++;
-      } catch (error) {
-        console.error(`Error sending email to ${user.email}:`, error);
+      } catch (err) {
+        console.error(`Bulk activation failed for ${user.email}:`, err);
         failedCount++;
+        failures.push(user.email);
       }
     }
 
     return NextResponse.json({
-      success: true,
-      sent: sentCount,
-      failed: failedCount,
-      message: `Sent ${sentCount} verification emails`,
+      success:  true,
+      sent:     sentCount,
+      failed:   failedCount,
+      skipped:  userIds.length - users.length,
+      failures,
+      message:  `Sent ${sentCount} activation email${sentCount !== 1 ? 's' : ''}${failedCount ? `, ${failedCount} failed` : ''}.`,
     });
+
   } catch (error) {
-    console.error('Error in bulk resend verification:', error);
+    console.error('Bulk resend-verification error:', error);
     return NextResponse.json(
-      { error: 'Failed to resend verification emails' },
+      { error: 'Failed to process bulk activation emails.' },
       { status: 500 }
     );
   }
 }
-

@@ -57,6 +57,9 @@ export async function sendEmail(options: EmailOptions): Promise<SendEmailResult>
 
 /**
  * Send welcome email to newly created user
+ * NOTE: This is kept for backward compatibility but is no longer called
+ * when admins create users. Admin-created users now receive
+ * sendAdminCreatedUserActivationEmail instead.
  */
 export async function sendNewUserWelcomeEmail(
   userEmail: string,
@@ -323,5 +326,170 @@ export async function sendEmailVerificationEmail(options: {
   const result = await sendEmail({ to: options.email, subject, html,
     text: `Verify your email: ${options.verificationUrl}`,
   });
+  return result.success;
+}
+
+/**
+ * Send activation email to admin-created users.
+ * Replaces sendNewUserWelcomeEmail for the admin "Add User" flow.
+ * The link goes to /activate on the main app where the user sets
+ * their password — email is verified and trial starts in that same step.
+ */
+export async function sendAdminCreatedUserActivationEmail(options: {
+  to:              string;
+  firstName:       string;
+  company?:        string;
+  activationUrl:   string;
+  planTier:        string;
+  activationCode?: string;
+  expiresIn?:      string;
+}): Promise<boolean> {
+  const { to, firstName, company, activationUrl, planTier, activationCode, expiresIn = '72 hours' } = options;
+  const subject    = '🚀 Activate Your PreciseGovCon Account';
+  const tierLabel  = planTier.toUpperCase();
+
+  const codeBlock = activationCode ? `
+    <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:14px 18px;border-radius:6px;margin:18px 0;">
+      <p style="margin:0;font-size:13px;color:#92400e;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;">Your Activation / Trial Code</p>
+      <p style="margin:6px 0 0 0;font-size:22px;font-family:monospace;font-weight:900;color:#78350f;letter-spacing:0.1em;">${activationCode}</p>
+      <p style="margin:6px 0 0 0;font-size:12px;color:#a16207;">This code is pre-applied — no need to type it manually.</p>
+    </div>` : '';
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${subject}</title>
+</head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1e293b;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
+
+          <!-- HEADER -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#ea580c 0%,#f97316 100%);border-radius:12px 12px 0 0;padding:32px 36px;text-align:center;">
+              <p style="margin:0 0 6px 0;font-size:13px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.75);">PRECISE GOVCON</p>
+              <h1 style="margin:0;font-size:28px;font-weight:900;color:#ffffff;line-height:1.2;">You're one step away!</h1>
+              <p style="margin:10px 0 0 0;font-size:16px;color:rgba(255,255,255,0.85);">Activate your account to start finding federal contracts</p>
+            </td>
+          </tr>
+
+          <!-- BODY -->
+          <tr>
+            <td style="background:#ffffff;padding:36px 36px 28px 36px;">
+
+              <p style="margin:0 0 16px 0;font-size:16px;color:#334155;">
+                Hello <strong>${firstName}</strong>${company ? `, from <strong>${company}</strong>` : ''},
+              </p>
+
+              <p style="margin:0 0 20px 0;font-size:15px;color:#475569;line-height:1.6;">
+                An account has been created for you on PreciseGovCon. To get started, click the button below to
+                <strong>set your password and verify your email</strong> — it takes less than 60 seconds.
+              </p>
+
+              <!-- Plan badge -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin:0 0 20px 0;">
+                <tr>
+                  <td style="padding:14px 18px;">
+                    <span style="font-size:13px;color:#64748b;font-weight:600;">Your Plan: </span>
+                    <span style="background:#0f172a;color:#f97316;font-size:12px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;padding:3px 10px;border-radius:20px;">${tierLabel}</span>
+                    <span style="font-size:13px;color:#10b981;font-weight:600;margin-left:12px;">✓ 7-Day Free Trial</span>
+                  </td>
+                </tr>
+              </table>
+
+              ${codeBlock}
+
+              <!-- PRIMARY CTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${activationUrl}"
+                       style="display:inline-block;background:linear-gradient(135deg,#ea580c,#f97316);color:#ffffff;text-decoration:none;font-size:17px;font-weight:800;padding:16px 40px;border-radius:10px;letter-spacing:0.02em;">
+                      Set Password &amp; Activate Account →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- WHAT HAPPENS NEXT -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin:0 0 24px 0;">
+                <tr>
+                  <td style="padding:18px 20px;">
+                    <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.06em;">What happens when you click:</p>
+                    <ol style="margin:0;padding-left:20px;color:#15803d;font-size:14px;line-height:2.2;">
+                      <li>Choose a secure password for your account</li>
+                      <li>Your email is verified automatically</li>
+                      <li>Your free trial activates immediately</li>
+                      <li>You're signed in and ready to search contracts</li>
+                    </ol>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- EXPIRY WARNING -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px 0;">
+                <tr>
+                  <td style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:6px;">
+                    <p style="margin:0;font-size:13px;color:#92400e;">
+                      ⏰ <strong>This link expires in ${expiresIn}.</strong>
+                      If it expires, contact us at <a href="mailto:support@precisegovcon.com" style="color:#b45309;font-weight:600;">support@precisegovcon.com</a> for a new link.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- FALLBACK LINK -->
+              <p style="font-size:13px;color:#94a3b8;margin:0 0 8px 0;">Button not working? Copy and paste this link into your browser:</p>
+              <p style="font-size:12px;word-break:break-all;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;color:#64748b;margin:0 0 24px 0;">${activationUrl}</p>
+
+              <hr style="border:none;border-top:1px solid #f1f5f9;margin:0 0 20px 0;" />
+
+              <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6;">
+                If you didn't expect this email or have questions, contact us at
+                <a href="mailto:support@precisegovcon.com" style="color:#ea580c;font-weight:600;">support@precisegovcon.com</a>.
+                Do not share this activation link with anyone.
+              </p>
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="background:#0f172a;border-radius:0 0 12px 12px;padding:20px 36px;text-align:center;">
+              <p style="margin:0;font-size:12px;color:rgba(255,255,255,0.4);">© 2025 PreciseGovCon · All rights reserved</p>
+              <p style="margin:6px 0 0 0;font-size:12px;color:rgba(255,255,255,0.3);">This is an automated message — please do not reply directly to this email.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim();
+
+  const result = await sendEmail({
+    to,
+    subject,
+    html,
+    text: [
+      `Hello ${firstName},`,
+      '',
+      `An account has been created for you on PreciseGovCon (${tierLabel} plan).`,
+      '',
+      'To activate your account and set your password, visit this link:',
+      activationUrl,
+      '',
+      activationCode ? `Your activation code: ${activationCode} (already pre-applied in the link above)` : '',
+      `This link expires in ${expiresIn}.`,
+      '',
+      'Questions? Email support@precisegovcon.com',
+    ].filter(Boolean).join('\n'),
+  });
+
   return result.success;
 }

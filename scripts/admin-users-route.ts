@@ -1,12 +1,14 @@
-//app/api/users/route.ts
-
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { createAuditLog } from '@/lib/audit';
-import { sendAdminCreatedUserActivationEmail, sendAdminNewUserNotification } from '@/lib/email';
+import { sendAdminNewUserNotification } from '@/lib/email';
+// ✅ Import the activation email from the MAIN app's email lib, or re-export it from admin's email lib
+// If admin and main app share a lib, use sendEmailVerificationEmail directly.
+// Otherwise copy the function below into your admin's lib/email.ts
+import { sendAdminCreatedUserActivationEmail } from '@/lib/email';
 import { z } from 'zod';
 import crypto from 'crypto';
 
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
     const body    = await request.json();
     const data    = createUserSchema.parse(body);
 
-    // Resolve display name — prefer explicit name, then compose from parts, then email prefix
+    // Resolve display name
     const resolvedName =
       data.name ||
       [data.firstName, data.lastName].filter(Boolean).join(' ') ||
@@ -114,29 +116,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── 1. Create user — inactive until they click activation link ────────────
-    // email_verified and password_hash are intentionally left null.
-    // The user sets their password on the /activate page in the main app.
+    // ── 1. Create user — NOT yet active, no email_verified, no password ──────
+    // The user must click the activation link to set their password and
+    // verify their email before they can log in.
     const newUser = await prisma.user.create({
       data: {
-        id:           crypto.randomUUID(),
         email:        data.email,
         name:         resolvedName,
-        first_name:   data.firstName,
-        last_name:    data.lastName,
+        firstName:    data.firstName,
+        lastName:     data.lastName,
         company:      data.company,
         plan_tier:    data.plan_tier,
-        plan_status:  'INACTIVE',   // becomes 'trialing' after activation
-        is_active:    false,        // becomes true after activation
+        plan_status:  'INACTIVE',    // becomes TRIALING after activation
+        is_active:    false,         // becomes true after activation
         is_suspended: false,
-        updated_at:   new Date(),
-        // email_verified: left null — set during activation
-        // password_hash:  left null — set during activation
+        // email_verified left null — set during activation
+        // password_hash left null — set during activation
       },
     });
 
-    // ── 2. Generate a secure token and store its SHA-256 hash ─────────────────
-    // Reuses the existing email_verification_tokens table — no schema changes needed.
+    // ── 2. Create a verification token (raw) and store its hash ──────────────
+    // Reuse the existing email_verification_tokens table in your main DB.
+    // The main app's /api/auth/verify-email route already reads from this table.
     const rawToken  = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 hours
@@ -150,9 +151,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // ── 3. Build activation URL → main app /activate page ────────────────────
-    // The /activate page lets the user set their password, verifies the token,
-    // then activates the account and starts the trial.
+    // ── 3. Build activation URL → main site /activate (set-password page) ───
+    // We send to /activate rather than /verify-email so the user can set
+    // their password in the same step. The /activate page then calls
+    // /api/auth/activate which: verifies the token, sets the password,
+    // marks email_verified, sets plan_status=TRIALING, is_active=true,
+    // then auto-logs the user in.
     const mainAppUrl    = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://precisegovcon.com';
     const activationUrl =
       `${mainAppUrl}/activate` +
@@ -160,7 +164,7 @@ export async function POST(request: NextRequest) {
       `&email=${encodeURIComponent(data.email)}` +
       (data.activation_code ? `&code=${encodeURIComponent(data.activation_code)}` : '');
 
-    // ── 4. Send activation email (non-blocking) ───────────────────────────────
+    // ── 4. Send activation email (non-blocking, with retry URL in email) ─────
     sendAdminCreatedUserActivationEmail({
       to:             newUser.email,
       firstName:      data.firstName || resolvedName.split(' ')[0],
