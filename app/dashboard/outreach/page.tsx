@@ -1106,6 +1106,30 @@ export default function OutreachPage() {
     if (!hasVisibleInFolder) setOutreachFolder('all');
   }, [activeTab, contractors, outreachFolder, isOutreachTestOnly, isOutreachMixedMode]);
 
+  // ── Queue entry action (approve / reject / delete) ────────────────────────
+  const queueAction = async (id: string, action: 'approve' | 'reject' | 'delete') => {
+    try {
+      if (action === 'delete') {
+        const res = await fetch(`/api/sam/queue/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Delete failed');
+        setPipelineQueue((q: any[]) => q.filter((i: any) => i.id !== id));
+        notify('Entry removed');
+      } else {
+        const status = action === 'approve' ? 'approved' : 'rejected';
+        const res = await fetch(`/api/sam/queue/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        });
+        if (!res.ok) throw new Error('Update failed');
+        setPipelineQueue((q: any[]) => q.map((i: any) => i.id === id ? { ...i, status } : i));
+        notify(action === 'approve' ? 'Approved ✓' : 'Rejected');
+      }
+    } catch (e: any) {
+      notify(e.message || 'Action failed', 'error');
+    }
+  };
+
   // ── Load drawer detail data ──────────────────────────────────────────────────
   const openDrawer = async (c: Contractor) => {
     setDetail(c);
@@ -4343,9 +4367,21 @@ export default function OutreachPage() {
                                     <p className={item.samEntity?.enrichment?.publicPhone ? 'text-emerald-700' : 'text-slate-400'}>{item.samEntity?.enrichment?.publicPhone || 'No phone'}</p>
                                   </div>
                                 </div>
-                                <div className="mt-2 flex items-center gap-2">
+                                <div className="mt-2 flex items-center gap-2 flex-wrap">
                                   <span className={`text-xs font-black px-2 py-0.5 rounded-full ${scoreBg(item.samEntity?.leadScore?.score || 0)}`}>Score {item.samEntity?.leadScore?.score ?? 0}</span>
-                                  {item.notes && <span className="text-xs text-slate-500">{item.notes}</span>}
+                                  {item.notes && <span className="text-xs text-slate-500 truncate">{item.notes}</span>}
+                                  <div className="ml-auto flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => queueAction(item.id, 'reject')}
+                                      className="text-xs px-2 py-1 rounded-lg bg-red-50 text-red-600 font-bold hover:bg-red-100 transition flex items-center gap-1"
+                                      title="Reject — move out of approved"
+                                    ><XCircle className="w-3 h-3" />Reject</button>
+                                    <button
+                                      onClick={() => { if (window.confirm('Remove this entry permanently?')) queueAction(item.id, 'delete'); }}
+                                      className="text-xs px-2 py-1 rounded-lg bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition flex items-center gap-1"
+                                      title="Delete permanently"
+                                    ><Trash2 className="w-3 h-3" /></button>
+                                  </div>
                                 </div>
                               </div>
                             ))}
@@ -4381,8 +4417,20 @@ export default function OutreachPage() {
                                     <p className={item.samEntity?.enrichment?.publicEmail ? 'text-emerald-700 font-semibold truncate' : 'text-slate-400'}>{item.samEntity?.enrichment?.publicEmail || 'No email'}</p>
                                   </div>
                                 </div>
-                                <div className="mt-2">
+                                <div className="mt-2 flex items-center gap-2 flex-wrap">
                                   <span className={`text-xs font-black px-2 py-0.5 rounded-full ${scoreBg(item.samEntity?.leadScore?.score || 0)}`}>Score {item.samEntity?.leadScore?.score ?? 0}</span>
+                                  <div className="ml-auto flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => queueAction(item.id, 'approve')}
+                                      className="text-xs px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold hover:bg-emerald-100 transition flex items-center gap-1"
+                                      title="Approve for sending"
+                                    ><CheckCircle2 className="w-3 h-3" />Approve</button>
+                                    <button
+                                      onClick={() => { if (window.confirm('Remove this entry permanently?')) queueAction(item.id, 'delete'); }}
+                                      className="text-xs px-2 py-1 rounded-lg bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition flex items-center gap-1"
+                                      title="Delete permanently"
+                                    ><Trash2 className="w-3 h-3" /></button>
+                                  </div>
                                 </div>
                               </div>
                             ))}
@@ -4401,10 +4449,20 @@ export default function OutreachPage() {
                             {recentQueue.filter((i: any) => i.status === 'sent').map((item: any) => (
                               <div key={item.id} className="px-5 py-3">
                                 <div className="flex items-center justify-between gap-3">
-                                  <p className="text-sm font-bold text-slate-700 truncate">{item.samEntity?.legalBusinessName || 'Unknown'}</p>
-                                  <span className="text-xs font-black px-2 py-1 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">sent</span>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-slate-700 truncate">{item.samEntity?.legalBusinessName || 'Unknown'}</p>
+                                    <p className="text-xs text-slate-400 mt-0.5">{item.samEntity?.uei || '—'}</p>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    <span className="text-xs font-black px-2 py-1 rounded-full bg-blue-100 text-blue-700">sent</span>
+                                    {item.sentAt && <span className="text-xs text-slate-400">{String(item.sentAt).slice(0,10)}</span>}
+                                    <button
+                                      onClick={() => { if (window.confirm('Remove this entry permanently?')) queueAction(item.id, 'delete'); }}
+                                      className="text-xs px-1.5 py-1 rounded-lg bg-slate-100 text-slate-400 font-bold hover:bg-slate-200 transition"
+                                      title="Delete permanently"
+                                    ><Trash2 className="w-3 h-3" /></button>
+                                  </div>
                                 </div>
-                                <p className="text-xs text-slate-400 mt-0.5">{item.samEntity?.uei || '—'}</p>
                               </div>
                             ))}
                           </>
