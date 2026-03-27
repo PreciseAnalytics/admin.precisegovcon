@@ -1,3 +1,5 @@
+//app/unsubscribe/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
@@ -32,6 +34,38 @@ export async function GET(request: NextRequest) {
   const contractorId = searchParams.get('cid');
   const emailLogId = searchParams.get('elid');
   const email = (searchParams.get('email') || '').trim().toLowerCase();
+
+  // ── Queue ID branch: sam_entities cold outreach pipeline ─────────────────────
+  const queueId = searchParams.get('qid');
+  if (queueId) {
+    try {
+      const entry = await prisma.outreachQueue.findUnique({
+        where:  { id: queueId },
+        select: { id: true, status: true, samEntityId: true, samEntity: { select: { enrichment: { select: { publicEmail: true } } } } },
+      });
+      if (entry && entry.status !== 'unsubscribed') {
+        await prisma.outreachQueue.update({
+          where: { id: queueId },
+          data:  { status: 'unsubscribed', notes: 'Unsubscribed via email link on ' + new Date().toISOString().slice(0, 10) },
+        });
+        // Also add to suppression list if we have their email
+        const suppressEmail = entry.samEntity?.enrichment?.publicEmail;
+        if (suppressEmail) {
+          await prisma.emailSuppression.upsert({
+            where:  { email: suppressEmail.trim().toLowerCase() },
+            update: { reason: 'unsubscribed', source: 'link_click', updatedAt: new Date() },
+            create: { email: suppressEmail.trim().toLowerCase(), reason: 'unsubscribed', source: 'link_click' },
+          }).catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.error('[unsubscribe] qid error:', err);
+    }
+    return new NextResponse(
+      renderPage('You Have Been Unsubscribed', 'You have been removed from future outreach emails. If this was a mistake, contact support@precisegovcon.com.'),
+      { headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+    );
+  }
 
   if (contractorId) {
     const redirectUrl = new URL('/api/track/unsubscribe', origin);
