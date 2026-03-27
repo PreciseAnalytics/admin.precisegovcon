@@ -1,3 +1,5 @@
+// lib/auth.ts
+
 import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
@@ -8,21 +10,23 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-t
 const COOKIE_NAME = 'admin_session';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
-const IP_WHITELIST = process.env.IP_WHITELIST 
+const IP_WHITELIST = process.env.IP_WHITELIST
   ? process.env.IP_WHITELIST.split(',').map(ip => ip.trim())
   : [];
+
+export type AdminRoleString = 'SUPER_ADMIN' | 'ADMIN' | 'VIEWER';
 
 export interface AdminSession {
   id: string;
   email: string;
   name: string | null;
-  role: string;
+  role: AdminRoleString;
 }
 
 export interface TokenPayload {
   userId: string;
   email: string;
-  role: string;
+  role: AdminRoleString;
   iat?: number;
   exp?: number;
 }
@@ -125,6 +129,16 @@ export async function requireAdmin(): Promise<AdminSession> {
 
   if (session.role !== 'ADMIN' && session.role !== 'SUPER_ADMIN') {
     throw new Error('Forbidden - Admin access required');
+  }
+
+  return session;
+}
+
+export async function requireSuperAdmin(): Promise<AdminSession> {
+  const session = await requireSession();
+
+  if (session.role !== 'SUPER_ADMIN') {
+    throw new Error('Forbidden - Super admin access required');
   }
 
   return session;

@@ -1,3 +1,5 @@
+//app/dashboard/users/[id]/page.tsx
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -18,6 +20,10 @@ interface UserDetail {
   lastName: string | null;
   company: string | null;
   phone: string | null;
+
+  // ✅ Use DB field name
+  role?: string | null;
+
   plan: string | null;
   plan_status: string | null;
   plan_tier: string | null;
@@ -31,11 +37,24 @@ interface UserDetail {
   stripe_subscription_id: string | null;
 }
 
+const normalizeRole = (role: unknown) => {
+  const r = String(role ?? 'USER').toUpperCase();
+  if (r === 'ADMIN' || r === 'SUPER_ADMIN' || r === 'USER') return r;
+  return 'USER';
+};
+
 export default function UserDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [user, setUser] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // Role state
+  const [userRole, setUserRole] = useState('USER');
+  const [originalUserRole, setOriginalUserRole] = useState('USER');
+  const [savingRole, setSavingRole] = useState(false);
 
   // Form state
   const [name, setName] = useState('');
@@ -51,6 +70,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     fetchUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
   const fetchUser = async () => {
@@ -71,7 +91,8 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         return;
       }
 
-      const u = data.user;
+      const u = data.user as UserDetail;
+
       setUser(u);
       setName(u.name || '');
       setFirstName(u.firstName || '');
@@ -83,6 +104,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
       setPlanStatus(u.plan_status || 'INACTIVE');
       setIsActive(u.is_active ?? true);
       setIsSuspended(u.is_suspended ?? false);
+
+      const role = normalizeRole(u.role);
+      setUserRole(role);
+      setOriginalUserRole(role);
     } catch (error) {
       toast.error('Failed to fetch user');
     } finally {
@@ -90,41 +115,106 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
+  const handleSaveRole = async () => {
+    if (!user) return;
+
+    setSavingRole(true);
     try {
       const res = await fetch(`/api/users/${params.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name || null,
-          firstName: firstName || null,
-          lastName: lastName || null,
-          email,
-          company: company || null,
-          phone: phone || null,
-          plan_tier: planTier,
-          plan_status: planStatus,
-        }),
+        // ✅ PATCH DB field name
+        body: JSON.stringify({ user_role: userRole }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to update user role', {
+          duration: 5000,
+        });
+        return;
+      }
+
+      toast.success('User role updated successfully', {
+        duration: 5000,
+        action: {
+          label: 'Close',
+          onClick: () => {},
+        },
+      });
+      setOriginalUserRole(userRole);
+      fetchUser();
+    } catch (error) {
+      console.error('Save role error:', error);
+      toast.error('Network error — could not save role', {
+        duration: 5000,
+      });
+    } finally {
+      setSavingRole(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const body: Record<string, any> = {
+        email,
+        plan_tier: planTier,
+        plan_status: planStatus,
+      };
+
+      if (firstName?.trim()) body.firstName = firstName;
+      if (lastName?.trim()) body.lastName = lastName;
+      if (name?.trim()) body.name = name;
+      if (company?.trim()) body.company = company;
+      if (phone?.trim()) body.phone = phone;
+
+      const res = await fetch(`/api/users/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
 
       const data = await res.json();
 
       if (res.status === 401) {
-        toast.error('Session expired — please log in again');
+        toast.error('Session expired — please log in again', {
+          duration: 5000,
+        });
         router.push('/');
         return;
       }
 
       if (!res.ok) {
-        toast.error(data.error || 'Failed to update user');
+        toast.error(data.error || 'Failed to update user', {
+          duration: 5000,
+        });
+        console.error('Save error:', data);
         return;
       }
 
-      toast.success('User updated successfully');
-      fetchUser();
+      toast.success('User details updated successfully! Changes will appear in the user list.', {
+        duration: 8000,
+        action: {
+          label: 'Close',
+          onClick: () => {},
+        },
+      });
+      
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      
+      // Refresh user data to show updated values
+      await fetchUser();
+      
+      // Invalidate the users list cache by doing a background fetch
+      fetch('/api/users').catch(() => {});
     } catch (error) {
-      toast.error('Network error — check your connection');
+      toast.error('Network error — check your connection', {
+        duration: 5000,
+      });
+      console.error('Save error:', error);
     } finally {
       setSaving(false);
     }
@@ -134,7 +224,9 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
     const newPassword = prompt('Enter new password (min 8 characters):');
     if (!newPassword) return;
     if (newPassword.length < 8) {
-      toast.error('Password must be at least 8 characters');
+      toast.error('Password must be at least 8 characters', {
+        duration: 5000,
+      });
       return;
     }
     try {
@@ -143,10 +235,28 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ newPassword }),
       });
-      if (!res.ok) throw new Error();
-      toast.success('Password reset successfully');
-    } catch {
-      toast.error('Failed to reset password');
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to reset password', {
+          duration: 5000,
+        });
+        return;
+      }
+      
+      toast.success('Password reset successfully', {
+        duration: 5000,
+        action: {
+          label: 'Close',
+          onClick: () => {},
+        },
+      });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      toast.error('Failed to reset password', {
+        duration: 5000,
+      });
     }
   };
 
@@ -157,11 +267,31 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_suspended: !isSuspended }),
       });
-      if (!res.ok) throw new Error();
-      toast.success(isSuspended ? 'User unsuspended' : 'User suspended');
-      fetchUser();
-    } catch {
-      toast.error('Failed to update user');
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to update user', {
+          duration: 5000,
+        });
+        return;
+      }
+      
+      toast.success(isSuspended ? 'User unsuspended successfully' : 'User suspended successfully', {
+        duration: 5000,
+        action: {
+          label: 'Close',
+          onClick: () => {},
+        },
+      });
+      
+      await fetchUser();
+      fetch('/api/users').catch(() => {});
+    } catch (error) {
+      console.error('Toggle suspend error:', error);
+      toast.error('Failed to update user', {
+        duration: 5000,
+      });
     }
   };
 
@@ -172,23 +302,65 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: !isActive }),
       });
-      if (!res.ok) throw new Error();
-      toast.success(isActive ? 'User deactivated' : 'User activated');
-      fetchUser();
-    } catch {
-      toast.error('Failed to update user');
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to update user', {
+          duration: 5000,
+        });
+        return;
+      }
+      
+      toast.success(isActive ? 'User deactivated successfully' : 'User activated successfully', {
+        duration: 5000,
+        action: {
+          label: 'Close',
+          onClick: () => {},
+        },
+      });
+      
+      await fetchUser();
+      fetch('/api/users').catch(() => {});
+    } catch (error) {
+      console.error('Toggle active error:', error);
+      toast.error('Failed to update user', {
+        duration: 5000,
+      });
     }
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this user? This cannot be undone.')) return;
+    setShowDeleteModal(false);
+    
     try {
-      const res = await fetch(`/api/users/${params.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error();
-      toast.success('User deleted');
-      router.push('/dashboard/users');
-    } catch {
-      toast.error('Failed to delete user');
+      const res = await fetch(`/api/users/${params.id}`, { 
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to delete user', {
+          duration: 5000,
+        });
+        console.error('Delete error:', data);
+        return;
+      }
+      
+      toast.success('User deleted successfully', {
+        duration: 5000,
+      });
+      
+      setTimeout(() => {
+        router.push('/dashboard/users');
+      }, 500);
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Network error — failed to delete user', {
+        duration: 5000,
+      });
     }
   };
 
@@ -213,9 +385,9 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
       <div className="mb-8">
         <button
           onClick={() => router.back()}
-          className="flex items-center text-slate-600 hover:text-slate-900 mb-4 transition"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold text-sm transition shadow-sm mb-4"
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
+          <ArrowLeft className="w-4 h-4" />
           Back to Users
         </button>
         <div className="flex items-center gap-4">
@@ -249,7 +421,6 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
-
           {/* Contact Information */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <div className="flex items-center justify-between mb-6">
@@ -260,13 +431,35 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition text-sm font-medium"
+                className={`flex items-center gap-2 px-4 py-2.5 disabled:opacity-60 text-white rounded-lg transition text-sm font-semibold shadow-sm hover:shadow-md ${
+                  saved
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                <Save className="w-4 h-4" />
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                    Saving...
+                  </>
+                ) : saved ? (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Saved ✓
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Save Changes
+                  </>
+                )}
               </button>
             </div>
 
+            {/* (unchanged inputs...) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
@@ -356,7 +549,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
             </div>
           </div>
 
-          {/* Subscription */}
+          {/* Subscription (unchanged) */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <div className="flex items-center gap-2 mb-6">
               <CreditCard className="w-5 h-5 text-green-600" />
@@ -517,6 +710,29 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                 </span>
               </button>
 
+              {/* ✅ Role Selector (now wired to "role") */}
+              <div className="pt-2">
+                <label className="block text-sm font-semibold text-slate-900 mb-2">User Role</label>
+                <select
+                  value={userRole}
+                  onChange={(e) => setUserRole(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="USER">Regular User</option>
+                  <option value="ADMIN">Admin</option>
+                  <option value="SUPER_ADMIN">Super Admin</option>
+                </select>
+                {userRole !== originalUserRole && (
+                  <button
+                    onClick={handleSaveRole}
+                    disabled={savingRole}
+                    className="w-full mt-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white rounded-lg font-medium transition"
+                  >
+                    {savingRole ? 'Saving...' : 'Save Role'}
+                  </button>
+                )}
+              </div>
+
               <button
                 onClick={handleToggleActive}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition text-sm ${
@@ -532,7 +748,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               </button>
 
               <button
-                onClick={handleDelete}
+                onClick={() => setShowDeleteModal(true)}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-red-50 hover:bg-red-100 rounded-lg transition text-sm"
               >
                 <Trash2 className="w-4 h-4 text-red-600" />
@@ -541,7 +757,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
             </div>
           </div>
 
-          {/* User Info */}
+          {/* Account Details (unchanged) */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h3 className="text-sm font-semibold text-slate-900 mb-4">Account Details</h3>
             <div className="space-y-3">
@@ -610,8 +826,66 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               )}
             </div>
           </div>
+
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowDeleteModal(false)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200">
+            <div className="flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mx-auto mb-4">
+              <Trash2 className="w-7 h-7 text-red-600" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 text-center mb-1">Delete User Account</h2>
+            <p className="text-slate-500 text-sm text-center mb-5">This action is permanent and cannot be undone.</p>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Name</span>
+                <span className="font-semibold text-slate-900">{displayName}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Email</span>
+                <span className="font-semibold text-slate-900">{email}</span>
+              </div>
+              {company && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Company</span>
+                  <span className="font-semibold text-slate-900">{company}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Plan</span>
+                <span className="font-semibold text-slate-900">{planTier} · {planStatus}</span>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-3 mb-6">
+              <XCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-red-700 leading-relaxed">
+                All account data including subscription info, login history, and profile details will be <strong>permanently deleted</strong> from the database.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition shadow-sm"
+              >
+                Yes, Delete User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

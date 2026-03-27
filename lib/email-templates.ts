@@ -128,7 +128,7 @@ function layout(content: string, unsubLink: string, preheader = ''): string {
                 &nbsp;·&nbsp;
                 <a href="${BRAND.privacyUrl}" style="color:${BRAND.muted};text-decoration:none;">Privacy Policy</a>
               </p>
-              <p style="margin:0;font-size:11px;color:#94a3b8;">© ${new Date().getFullYear()} Precise Analytics LLC · Virginia · VOSB · Minority-Owned</p>
+              <p style="margin:0;font-size:11px;color:#94a3b8;">© ${new Date().getFullYear()} Precise Analytics LLC. All rights reserved.</p>
             </td>
           </tr>
 

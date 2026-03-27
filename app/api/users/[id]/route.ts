@@ -1,11 +1,7 @@
 // app/api/users/[id]/route.ts
-//
-// IMPORTANT: This uses prisma.user (singular) — the admin portal Prisma schema
-// maps the User model to the "users" table via @@map("users"), but the Prisma
-// client accessor is prisma.user (not prisma.users).
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireSession, hashPassword } from '@/lib/auth';
+import { requireSession, requireAdmin, requireSuperAdmin } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { logUserUpdate, logUserDeletion, createAuditLog } from '@/lib/audit';
 import { sendEmail } from '@/lib/email';
@@ -22,9 +18,18 @@ const updateUserSchema = z.object({
   plan_status:  z.string().optional(),
   is_active:    z.boolean().optional(),
   is_suspended: z.boolean().optional(),
+
+  // Frontend calls it user_role — DB uses role
+  user_role:    z.enum(['USER', 'ADMIN', 'SUPER_ADMIN']).optional(),
 });
 
-// ── Helper: notify admin of user record changes ───────────────────────────────
+function normalizeRole(input: unknown): 'USER' | 'ADMIN' | 'SUPER_ADMIN' {
+  const v = String(input ?? '').trim().toUpperCase();
+  if (v === 'SUPER_ADMIN') return 'SUPER_ADMIN';
+  if (v === 'ADMIN') return 'ADMIN';
+  return 'USER';
+}
+
 async function notifyAdminOfUserUpdate(opts: {
   adminEmail: string;
   adminId:    string;
@@ -102,7 +107,6 @@ async function notifyAdminOfUserUpdate(opts: {
   }).catch(err => console.error('Admin update notification failed (non-fatal):', err));
 }
 
-// ── GET /api/users/[id] ───────────────────────────────────────────────────────
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -133,14 +137,25 @@ export async function GET(
         stripe_subscription_id: true,
         trial_active:           true,
         trial_expires_at:       true,
+
+        // DB field:
+        role:                   true,
       },
     });
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    return NextResponse.json({ user });
+    // Return shape expected by your UI (`user_role`)
+    const payload = {
+      ...user,
+      user_role: normalizeRole(user.role),
+    };
+
+    // Avoid leaking DB-only name if your UI doesn't need it
+    // (Keeping role in payload is harmless, but optional)
+    // delete (payload as any).role;
+
+    return NextResponse.json({ user: payload });
   } catch (error: any) {
     if (error?.message?.includes('Unauthorized')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -150,26 +165,31 @@ export async function GET(
   }
 }
 
-// ── PATCH /api/users/[id] ─────────────────────────────────────────────────────
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  let session: Awaited<ReturnType<typeof requireSession>> | null = null;
+  let session: Awaited<ReturnType<typeof requireAdmin>> | null = null;
 
   try {
-    session = await requireSession();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    session = await requireAdmin(); // Only ADMIN/SUPER_ADMIN can edit users
+  } catch (e: any) {
+    const msg = e?.message || '';
+    if (msg.includes('Unauthorized')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
-    const body    = await request.json();
-    const updates = updateUserSchema.parse(body);
+    const body   = await request.json();
+    const input  = updateUserSchema.parse(body);
 
-    // ── Fetch current state for diffing ──────────────────────────────────────
+    // Only SUPER_ADMIN can change user role
+    if (input.user_role !== undefined && session.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Only SUPER_ADMIN can change user roles' }, { status: 403 });
+    }
+
     const currentUser = await prisma.user.findUnique({
-      where:  { id: params.id },
+      where: { id: params.id },
       select: {
         id:           true,
         email:        true,
@@ -182,14 +202,21 @@ export async function PATCH(
         plan_status:  true,
         is_active:    true,
         is_suspended: true,
+
+        // DB field:
+        role:         true,
       },
     });
 
-    if (!currentUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (!currentUser) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+
+    // Map API field -> DB field
+    const updates: any = { ...input };
+    if (updates.user_role !== undefined) {
+      updates.role = updates.user_role;
+      delete updates.user_role;
     }
 
-    // ── Apply update ──────────────────────────────────────────────────────────
     const updatedUser = await prisma.user.update({
       where: { id: params.id },
       data:  updates,
@@ -214,10 +241,16 @@ export async function PATCH(
         stripe_subscription_id: true,
         trial_active:           true,
         trial_expires_at:       true,
+
+        // DB field:
+        role:                   true,
       },
     });
 
-    // ── Audit log ─────────────────────────────────────────────────────────────
+    // For logging + admin notification, compare on normalized role
+    const currentRoleNormalized = normalizeRole(currentUser.role);
+    const newRoleNormalized     = normalizeRole(updatedUser.role);
+
     try {
       await logUserUpdate(session.id, params.id, currentUser, updatedUser);
 
@@ -242,25 +275,40 @@ export async function PATCH(
           changesAfter:  { is_active: updates.is_active },
         });
       }
+
+      if (updates.role !== undefined && newRoleNormalized !== currentRoleNormalized) {
+        await createAuditLog({
+          adminUserId:   session.id,
+          action:        'UPDATE_USER_ROLE',
+          entityType:    'User',
+          entityId:      params.id,
+          changesBefore: { role: currentRoleNormalized },
+          changesAfter:  { role: newRoleNormalized },
+        });
+      }
     } catch (auditError) {
       console.error('Audit log failed (non-fatal):', auditError);
     }
 
-    // ── Admin notification on significant field changes ────────────────────────
     const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL;
     if (adminEmail) {
-      const TRACKED: Array<keyof typeof updates> = [
+      const changedFields: Record<string, { from: unknown; to: unknown }> = {};
+
+      // Track standard fields
+      const TRACKED: string[] = [
         'plan_tier', 'plan_status', 'is_active', 'is_suspended', 'email',
       ];
-      const changedFields: Record<string, { from: unknown; to: unknown }> = {};
 
       for (const field of TRACKED) {
         if (updates[field] === undefined) continue;
-        const currentVal = (currentUser as Record<string, unknown>)[field];
-        const newVal     = updates[field];
-        if (currentVal !== newVal) {
-          changedFields[field] = { from: currentVal, to: newVal };
-        }
+        const currentVal = (currentUser as any)[field];
+        const newVal     = (updatedUser as any)[field];
+        if (currentVal !== newVal) changedFields[field] = { from: currentVal, to: newVal };
+      }
+
+      // Track role change explicitly
+      if (updates.role !== undefined && newRoleNormalized !== currentRoleNormalized) {
+        changedFields['role'] = { from: currentRoleNormalized, to: newRoleNormalized };
       }
 
       if (Object.keys(changedFields).length > 0) {
@@ -275,7 +323,13 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json({ success: true, user: updatedUser });
+    // Return payload expected by UI
+    const payload = {
+      ...updatedUser,
+      user_role: newRoleNormalized,
+    };
+
+    return NextResponse.json({ success: true, user: payload });
 
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -286,35 +340,36 @@ export async function PATCH(
   }
 }
 
-// ── DELETE /api/users/[id] ────────────────────────────────────────────────────
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  let session: Awaited<ReturnType<typeof requireSession>> | null = null;
+  let session: Awaited<ReturnType<typeof requireAdmin>> | null = null;
 
   try {
-    session = await requireSession();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    session = await requireAdmin(); // ADMIN and SUPER_ADMIN can delete users
+  } catch (e: any) {
+    const msg = e?.message || '';
+    if (msg.includes('Unauthorized')) return NextResponse.json({ error: 'Unauthorized - Please log in' }, { status: 401 });
+    return NextResponse.json({ error: 'Forbidden - Admin privileges required' }, { status: 403 });
   }
 
   try {
     const user = await prisma.user.findUnique({
-      where:  { id: params.id },
-      select: { id: true, email: true, name: true, company: true, plan_tier: true, plan_status: true },
+      where: { id: params.id },
+      select: { id: true, email: true, name: true, company: true, plan_tier: true, plan_status: true, role: true },
     });
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    // Clean up verification tokens first to avoid FK constraint errors
     await prisma.email_verification_tokens.deleteMany({
       where: { user_id: params.id },
     }).catch(() => {});
 
-    await prisma.user.delete({ where: { id: params.id } });
+    await prisma.user.delete({
+      where: { id: params.id },
+      select: { id: true }, // ✅ only select id — avoids pulling non-existent columns like user_role
+    });
 
     try {
       await logUserDeletion(session.id, params.id, user);
@@ -322,7 +377,6 @@ export async function DELETE(
       console.error('Audit log failed (non-fatal):', auditError);
     }
 
-    // Admin notification
     const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL;
     if (adminEmail) {
       sendEmail({

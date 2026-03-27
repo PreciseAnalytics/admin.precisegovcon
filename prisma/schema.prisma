@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -59,6 +61,8 @@ model CachedOpportunity {
   description         String?   @db.Text
   contract_value      String?
   url                 String?
+  business_state      String?   // State where business is registered
+  naics_definition    String?   // NAICS code definition/title
   active              Boolean   @default(true)
   synced_at           DateTime?
   created_at          DateTime  @default(now())
@@ -66,6 +70,51 @@ model CachedOpportunity {
   @@map("cached_opportunities")
 }
 
+// ── EmailLog ──────────────────────────────────────────────────────────────
+// Tracks every outbound email send
+
+model EmailLog {
+  id                String    @id @default(cuid())
+  email             String
+  campaign          String                        // CampaignType enum value
+  subject           String
+  status            String    @default("sent")    // sent | delivered | opened | clicked | bounced | complained | failed
+  sentAt            DateTime  @default(now())
+  openedAt          DateTime?
+  clickedAt         DateTime?
+  resendMessageId   String?   @unique             // Resend message ID for webhook matching
+  contractorId      String?
+  userId            String?
+  offerCodeId       String?
+  metadata          Json?                         // stores vars, errors, etc.
+
+  contractor        Contractor? @relation(fields: [contractorId], references: [id])
+  user              User?       @relation(fields: [userId], references: [id])
+  offerCode         OfferCode?  @relation(fields: [offerCodeId], references: [id])
+
+  @@index([email])
+  @@index([campaign])
+  @@index([status])
+  @@index([sentAt])
+  @@index([contractorId])
+  @@index([userId])
+  @@map("email_logs")
+}
+
+// ── EmailSuppression ──────────────────────────────────────────────────────
+// Suppression list: unsubscribed, bounced, complained
+
+model EmailSuppression {
+  id         String    @id @default(cuid())
+  email      String    @unique
+  reason     String                              // unsubscribed | bounced | complained
+  source     String?                             // link_click | resend_webhook | manual
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([email])
+  @@map("email_suppressions")
+}
 
 model User {
   id                         String                      @id @default(cuid())
@@ -123,6 +172,17 @@ model User {
   lastName                   String?
   email_verification_token   String?                     @unique
   email_verification_expires DateTime?                   @db.Timestamp(6)
+
+  // ✅ ADDED: Role for app users (drives your dropdown USER/ADMIN/SUPER_ADMIN)
+  user_role                  UserRole                    @default(USER)
+
+  // ✅ ADDED: Trial fields
+  trialStart                 DateTime?
+  trialEnd                   DateTime?
+
+  // ✅ ADDED: Email logs relation
+  emailLogs                  EmailLog[]
+
   accounts                   accounts[]
   alert_exports              alert_exports[]
   alert_subscriptions        alert_subscriptions[]
@@ -142,6 +202,10 @@ model User {
   @@index([stripe_customer_id])
   @@index([plan_status])
   @@index([plan_tier])
+
+  // ✅ ADDED: Index for role queries in admin portal
+  @@index([user_role])
+
   @@map("users")
 }
 
@@ -150,6 +214,7 @@ model Contractor {
   uei_number        String?       @unique
   name              String?
   email             String?
+  phone             String?
   sam_gov_id        String?
   cage_code         String?
   naics_code        String?
@@ -172,27 +237,133 @@ model Contractor {
   revenue           Decimal?      @default(0) @db.Decimal
   crm_activities    CrmActivity[]
   crm_tasks         CrmTask[]
-  email_logs        EmailLog[]
+  
+  // ✅ ADDED: Email logs relation
+  emailLogs         EmailLog[]
+
   is_test           Boolean       @default(false)
 
   @@map("contractors")
 }
 
-model EmailLog {
-  id            String     @id @default(dbgenerated("(gen_random_uuid())::text"))
-  contractor_id String
-  subject       String
-  body          String
-  offer_code    String?
-  campaign_type String?    @default("initial")
-  status        String?    @default("sent")
-  resend_id     String?
-  sent_at       DateTime?  @default(now()) @db.Timestamptz(6)
-  contractor    Contractor @relation(fields: [contractor_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+model SamEntity {
+  id                      String             @id @default(uuid())
+  uei                     String             @unique
+  cageCode                String?
+  legalBusinessName       String
+  dbaName                 String?
+  registrationStatus      String?
+  registrationDate        DateTime?          @db.Date
+  activationDate          DateTime?          @db.Date
+  expirationDate          DateTime?          @db.Date
+  ueiStatus               String?
+  purposeOfRegistration   String?
+  businessTypes           Json?
+  naicsCodes              Json?
+  pscCodes                Json?
+  physicalAddress         Json?
+  mailingAddress          Json?
+  samPayload              Json
+  firstSeenAt             DateTime           @default(now()) @db.Timestamptz(6)
+  lastSeenAt              DateTime           @default(now()) @db.Timestamptz(6)
+  createdAt               DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime           @default(now()) @updatedAt @db.Timestamptz(6)
+  enrichment              EntityEnrichment?
+  leadScore               LeadScore?
+  outreachQueue           OutreachQueue[]
 
-  @@index([contractor_id], map: "idx_email_logs_contractor")
-  @@index([sent_at], map: "idx_email_logs_sent")
-  @@map("email_logs")
+  @@index([registrationDate], map: "idx_sam_entities_registration_date")
+  @@index([activationDate], map: "idx_sam_entities_activation_date")
+  @@index([registrationStatus], map: "idx_sam_entities_registration_status")
+  @@map("sam_entities")
+}
+
+model EntityEnrichment {
+  id                   String    @id @default(uuid())
+  samEntityId          String    @unique
+  websiteUrl           String?
+  websiteDomain        String?
+  publicPhone          String?
+  publicEmail          String?
+  contactPageUrl       String?
+  linkedinUrl          String?
+  facebookUrl          String?
+  sourceConfidence     Float?
+  enrichmentStatus     String    @default("pending")
+  enrichmentNotes      String?
+  rawEnrichmentPayload Json?
+  enrichedAt           DateTime? @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  samEntity            SamEntity @relation(fields: [samEntityId], references: [id], onDelete: Cascade)
+
+  @@index([enrichmentStatus], map: "idx_entity_enrichment_status")
+  @@map("entity_enrichment")
+}
+
+model LeadScore {
+  id                  String    @id @default(uuid())
+  samEntityId         String    @unique
+  score               Int
+  fitScore            Int       @default(0)
+  contactabilityScore Int       @default(0)
+  recencyScore        Int       @default(0)
+  reasons             Json?
+  scoredAt            DateTime  @default(now()) @db.Timestamptz(6)
+  samEntity           SamEntity @relation(fields: [samEntityId], references: [id], onDelete: Cascade)
+
+  @@index([score], map: "idx_lead_scores_score")
+  @@map("lead_scores")
+}
+
+model OutreachQueue {
+  id           String    @id @default(uuid())
+  samEntityId  String
+  status       String    @default("queued")
+  campaignType String    @default("new_registrant")
+  assignedTo   String?
+  queuedAt     DateTime  @default(now()) @db.Timestamptz(6)
+  approvedAt   DateTime? @db.Timestamptz(6)
+  sentAt       DateTime? @db.Timestamptz(6)
+  notes        String?
+  samEntity    SamEntity @relation(fields: [samEntityId], references: [id], onDelete: Cascade)
+
+  @@index([status], map: "idx_outreach_queue_status")
+  @@index([queuedAt], map: "idx_outreach_queue_queued_at")
+  @@map("outreach_queue")
+}
+
+model IngestionRun {
+  id              String    @id @default(uuid())
+  source          String
+  runType         String
+  startedAt       DateTime  @default(now()) @db.Timestamptz(6)
+  finishedAt      DateTime? @db.Timestamptz(6)
+  status          String    @default("running")
+  requestParams   Json?
+  recordsFetched  Int       @default(0)
+  recordsInserted Int       @default(0)
+  recordsUpdated  Int       @default(0)
+  errorText       String?
+
+  @@index([source, runType, startedAt], map: "idx_ingestion_runs_source_type_started")
+  @@map("ingestion_runs")
+}
+
+// ── CseUsage ──────────────────────────────────────────────────────────────────
+// Tracks Google CSE queries per calendar day for hard budget enforcement.
+// Budget: $10/month = 2,000 queries/month @ $5/1,000 (paid tier).
+// Daily cap: 66 queries/day (2,000 ÷ 30, conservative).
+
+model CseUsage {
+  id         String   @id @default(uuid())
+  date       DateTime @unique @db.Date      // one row per UTC calendar day
+  queryCount Int      @default(0)           // CSE queries fired that day
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([date], map: "idx_cse_usage_date")
+  @@map("cse_usage")
 }
 
 model SyncLog {
@@ -223,6 +394,9 @@ model OfferCode {
   created_at     DateTime      @default(now()) @db.Timestamptz(6)
   updated_at     DateTime      @default(now()) @updatedAt @db.Timestamptz(6)
   crm_activities CrmActivity[]
+
+  // ✅ ADDED: Email logs relation
+  emailLogs      EmailLog[]
 
   @@index([active], map: "idx_offer_codes_active")
   @@index([code], map: "idx_offer_codes_code")
@@ -373,7 +547,7 @@ model alert_subscriptions {
   created_at              DateTime            @default(now())
   updated_at              DateTime
   user_id                 String
-  saved_search_id         String
+  saved_search_id         String?
   name                    String
   description             String?
   recipients              String
@@ -390,7 +564,7 @@ model alert_subscriptions {
   last_run_at             DateTime?
   last_result_count       Int?
   last_error              String?
-  saved_searches_v2       saved_searches_v2   @relation(fields: [saved_search_id], references: [id], onDelete: Cascade)
+  saved_searches_v2       saved_searches_v2?  @relation(fields: [saved_search_id], references: [id], onDelete: Cascade)
   users                   User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
   subscription_runs       subscription_runs[]
 
@@ -779,4 +953,10 @@ enum ExportStatus {
 enum RunStatus {
   SUCCESS
   ERROR
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
 }

@@ -68,9 +68,9 @@ export async function GET(request: NextRequest) {
     // Check if we already sent this type of reminder today
     const alreadySent = await prisma.emailLog.findFirst({
       where: {
-        contractor_id: contractor.id,
-        campaign_type: 'reminder',
-        sent_at: { gte: today },
+        contractorId: contractor.id,
+        campaign: 'reminder',
+        sentAt: { gte: today },
       },
     });
     if (alreadySent) { results.skipped++; continue; }
@@ -79,16 +79,17 @@ export async function GET(request: NextRequest) {
       // Create log row first for tracking pixel
       const logRow = await prisma.emailLog.create({
         data: {
-          contractor_id: contractor.id,
+          contractorId: contractor.id,
+          email:         contractor.email,
           subject:       daysLeft === 0
             ? `Your PreciseGovCon trial ends today, ${contractor.name || 'there'}`
             : daysLeft === 2
             ? `⏰ 2 days left on your PreciseGovCon trial`
             : `How's your trial going, ${contractor.name || 'there'}? (7 days in)`,
-          body:          `Trial reminder — ${daysLeft} days left`,
-          campaign_type: 'reminder',
+          campaign:      'reminder',
           status:        'sent',
-          resend_id:     null,
+          resendMessageId: null,
+          metadata:      { body: `Trial reminder — ${daysLeft} days left` },
         },
       });
 
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
         if (result.resendId) {
           await prisma.emailLog.update({
             where: { id: logRow.id },
-            data:  { resend_id: result.resendId },
+            data:  { resendMessageId: result.resendId },
           });
         }
         await prisma.crmActivity.create({

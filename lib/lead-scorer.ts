@@ -4,36 +4,43 @@
 // Returns a 0–100 integer. Higher = warmer lead, prioritize for outreach.
 //
 // Signal weights (total max = 100):
-//   Contact quality   : 20 pts  (has email, business domain vs free)
-//   NAICS presence    : 10 pts  (we can match to opportunities)
-//   Business type     : 20 pts  (set-asides are higher-margin customers)
-//   Registration age  : 15 pts  (newer = warmer, hasn't been pitched yet)
-//   CAGE code         : 10 pts  (validates they're actively pursuing contracts)
-//   State presence    : 5 pts   (have a real address)
-//   Active opps match : 20 pts  (NAICS matches live SAM.gov opportunities)
+//   Contact quality        : 20 pts  (has email, business domain vs free)
+//   NAICS presence         : 10 pts  (we can match to opportunities)
+//   Business type          : 20 pts  (set-asides are higher-margin customers)
+//   Registration age       : 10 pts  (newer = warmer, hasn't been pitched yet)
+//   Purpose of registration: 15 pts  (Z2/Z5 all-awards = active contract seeker)
+//   CAGE code              :  5 pts  (validates SAM registration is complete)
+//   State presence         :  5 pts  (has a real address)
+//   Active opps match      : 20 pts  (NAICS matches live SAM.gov opportunities)
+//
+// NOTE: Z2 (All Awards) scores highest — these entities actively pursue contracts.
+//   Z1 (Federal Assistance only) = pure grant seeker, NOT a contract hunter.
+//   Per SAM.gov Data Dictionary: Z1=Assistance, Z2=All Awards, Z5=All+IGT.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ScoringInput {
-  email:             string | null;
-  naics_code:        string | null;
-  business_type:     string | null;
-  registration_date: Date   | null;
-  cage_code:         string | null;
-  state:             string | null;
+  email:                   string | null;
+  naics_code:              string | null;
+  business_type:           string | null;
+  registration_date:       Date   | null;
+  cage_code:               string | null;
+  state:                   string | null;
+  purpose_of_registration?: string | null;  // Z2/Z5 = all awards (best), Z1 = assistance only (grant seeker)
   /** Pass active opportunity NAICS codes to get match bonus */
   activeOpportunityNaics?: string[];
 }
 
 export interface ScoreBreakdown {
-  total:            number;
-  contactQuality:   number;
-  naicsPresence:    number;
-  businessType:     number;
-  registrationAge:  number;
-  cageCode:         number;
-  statePresence:    number;
-  opportunityMatch: number;
-  label:            'Hot' | 'Warm' | 'Cold';
+  total:                 number;
+  contactQuality:        number;
+  naicsPresence:         number;
+  businessType:          number;
+  registrationAge:       number;
+  purposeOfRegistration: number;
+  cageCode:              number;
+  statePresence:         number;
+  opportunityMatch:      number;
+  label:                 'Hot' | 'Warm' | 'Cold';
 }
 
 const HIGH_VALUE_SET_ASIDES = new Set([
@@ -48,13 +55,14 @@ const HIGH_VALUE_SET_ASIDES = new Set([
 const FREE_EMAIL_DOMAINS = /gmail|yahoo|hotmail|outlook|aol|icloud|proton|mail\.com/i;
 
 export function scoreContractor(input: ScoringInput): ScoreBreakdown {
-  let contactQuality   = 0;
-  let naicsPresence    = 0;
-  let businessType     = 0;
-  let registrationAge  = 0;
-  let cageCode         = 0;
-  let statePresence    = 0;
-  let opportunityMatch = 0;
+  let contactQuality        = 0;
+  let naicsPresence         = 0;
+  let businessType          = 0;
+  let registrationAge       = 0;
+  let purposeOfRegistration = 0;
+  let cageCode              = 0;
+  let statePresence         = 0;
+  let opportunityMatch      = 0;
 
   // ── Contact quality (max 20) ──────────────────────────────────────────────
   if (input.email && input.email.includes('@')) {
@@ -82,21 +90,40 @@ export function scoreContractor(input: ScoringInput): ScoreBreakdown {
     }
   }
 
-  // ── Registration age (max 15) ─────────────────────────────────────────────
-  // Newer registrations = higher urgency, haven't been pitched by competitors yet
+  // ── Registration age (max 10) ─────────────────────────────────────────────
+  // Newer = higher urgency for outreach (hasn't been pitched yet).
+  // Reduced from 15 to 10 to make room for purposeOfRegistration signal.
   if (input.registration_date) {
     const daysAgo = (Date.now() - input.registration_date.getTime()) / 86_400_000;
-    if      (daysAgo <= 7)   registrationAge = 15;
-    else if (daysAgo <= 30)  registrationAge = 12;
-    else if (daysAgo <= 90)  registrationAge = 9;
-    else if (daysAgo <= 180) registrationAge = 6;
-    else if (daysAgo <= 365) registrationAge = 3;
+    if      (daysAgo <= 7)   registrationAge = 10;
+    else if (daysAgo <= 30)  registrationAge = 8;
+    else if (daysAgo <= 90)  registrationAge = 6;
+    else if (daysAgo <= 180) registrationAge = 4;
+    else if (daysAgo <= 365) registrationAge = 2;
     else                     registrationAge = 1;
   }
 
-  // ── CAGE code (max 10) ────────────────────────────────────────────────────
+  // ── Purpose of registration (max 15) ─────────────────────────────────────
+  // SAM.gov Data Dictionary (confirmed):
+  //   Z1 = Federal Assistance Awards ONLY → pure grant seeker, NOT a contract hunter
+  //   Z2 = All Awards (contracts + grants) → BEST fit, actively pursues contracts
+  //   Z5 = All Awards + IGT → also strong fit
+  //   Z4 = Assistance Awards + IGT → grant focused
+  //   Z3 = IGT Only → not relevant
+  // Z2/Z5 = ideal PreciseGovCon customer — they want contracts AND grants.
+  const por = (input.purpose_of_registration || '').toUpperCase();
+  if (por.includes('Z2') || por.includes('Z5') || por.includes('ALL AWARDS')) {
+    purposeOfRegistration = 15; // actively pursues contracts — best fit
+  } else if (por.includes('Z1') || por.includes('FEDERAL ASSISTANCE')) {
+    purposeOfRegistration = 3; // grant-focused, lower PreciseGovCon conversion
+  }
+  // Z3/Z4/unknown = 0 (neutral)
+
+  // ── CAGE code (max 5) ─────────────────────────────────────────────────────
+  // All SAM registrants get a CAGE code — it's not a strong differentiator.
+  // Kept as a minor signal to confirm registration is complete.
   if (input.cage_code && input.cage_code.trim().length > 0) {
-    cageCode = 10;
+    cageCode = 5;
   }
 
   // ── State presence (max 5) ────────────────────────────────────────────────
@@ -106,11 +133,10 @@ export function scoreContractor(input: ScoringInput): ScoreBreakdown {
 
   // ── Active opportunity NAICS match (max 20) ───────────────────────────────
   // If this contractor's NAICS matches an open SAM.gov opportunity, they have
-  // immediate, concrete motivation to subscribe to PreciseAnalytics.io
+  // immediate, concrete motivation to subscribe to PreciseGovCon.
   if (input.naics_code && input.activeOpportunityNaics?.length) {
-    const code = input.naics_code;
+    const code   = input.naics_code;
     const exact  = input.activeOpportunityNaics.includes(code);
-    // Also check 4-digit sector match (e.g. 5415 matches 541512)
     const sector = input.activeOpportunityNaics.some(
       n => n.startsWith(code.slice(0, 4)) || code.startsWith(n.slice(0, 4))
     );
@@ -121,7 +147,8 @@ export function scoreContractor(input: ScoringInput): ScoreBreakdown {
   const total = Math.min(
     100,
     contactQuality + naicsPresence + businessType +
-    registrationAge + cageCode + statePresence + opportunityMatch
+    registrationAge + purposeOfRegistration + cageCode +
+    statePresence + opportunityMatch
   );
 
   const label: ScoreBreakdown['label'] =
@@ -135,6 +162,7 @@ export function scoreContractor(input: ScoringInput): ScoreBreakdown {
     naicsPresence,
     businessType,
     registrationAge,
+    purposeOfRegistration,
     cageCode,
     statePresence,
     opportunityMatch,

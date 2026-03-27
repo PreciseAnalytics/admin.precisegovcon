@@ -35,40 +35,83 @@ function ProfileTab() {
     timezone: 'America/New_York',
   });
 
-  // Load avatar on mount
+  const [photoStatus, setPhotoStatus] = useState<'idle' | 'preview' | 'saved' | 'error'>('idle');
+  const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
+
+  // Load avatar on mount — wrapped in try/catch in case localStorage is unavailable
   useEffect(() => {
-    const saved = localStorage.getItem('admin_avatar');
-    if (saved) setAvatarUrl(saved);
+    try {
+      const saved = localStorage.getItem('admin_avatar');
+      if (saved) {
+        setAvatarUrl(saved);
+        setPhotoStatus('saved');
+      }
+    } catch (e) {
+      console.warn('Could not load avatar from localStorage:', e);
+    }
   }, []);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (fileInputRef.current) fileInputRef.current.value = '';
 
-    // Validate file
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      setPhotoStatus('error');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be under 5MB');
+      setPhotoStatus('error');
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
-      setAvatarUrl(dataUrl);
-      localStorage.setItem('admin_avatar', dataUrl);
-      // Dispatch event so Header picks it up immediately
-      window.dispatchEvent(new Event('avatar_updated'));
+      // Compress via canvas before storing to avoid localStorage quota issues
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX = 256;
+        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const compressed = canvas.toDataURL('image/jpeg', 0.85);
+        setPendingPhoto(compressed);
+        setPhotoStatus('preview');
+      };
+      img.src = dataUrl;
     };
     reader.readAsDataURL(file);
   };
 
+  const confirmSavePhoto = () => {
+    if (!pendingPhoto) return;
+    try {
+      localStorage.setItem('admin_avatar', pendingPhoto);
+      setAvatarUrl(pendingPhoto);
+      setPendingPhoto(null);
+      setPhotoStatus('saved');
+      window.dispatchEvent(new Event('avatar_updated'));
+    } catch (e) {
+      setPhotoStatus('error');
+      console.error('localStorage quota exceeded:', e);
+    }
+  };
+
+  const cancelPhotoPreview = () => {
+    setPendingPhoto(null);
+    setPhotoStatus(avatarUrl ? 'saved' : 'idle');
+  };
+
   const removePhoto = () => {
+    try {
+      localStorage.removeItem('admin_avatar');
+    } catch (e) {}
     setAvatarUrl(null);
-    localStorage.removeItem('admin_avatar');
+    setPendingPhoto(null);
+    setPhotoStatus('idle');
     window.dispatchEvent(new Event('avatar_updated'));
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -120,26 +163,59 @@ function ProfileTab() {
 
             {/* Upload Controls */}
             <div className="flex-1">
-              <p className="text-sm font-semibold text-slate-900">Upload a profile photo</p>
-              <p className="text-xs text-slate-500 mt-1">JPG, PNG or GIF. Max 5MB. Square images work best.</p>
-              <div className="flex items-center gap-3 mt-3">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-lg transition shadow-sm"
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload Photo
-                </button>
-                {avatarUrl && (
-                  <button
-                    onClick={removePhoto}
-                    className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 text-sm font-semibold rounded-lg transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Remove
-                  </button>
-                )}
-              </div>
+              {photoStatus === 'preview' && pendingPhoto ? (
+                <>
+                  <p className="text-sm font-semibold text-slate-900 mb-1">Preview — does this look right?</p>
+                  <img src={pendingPhoto} alt="Preview" className="w-16 h-16 rounded-xl object-cover border border-slate-200 mb-3 shadow-sm" />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={confirmSavePhoto}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition shadow-sm"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Save Photo
+                    </button>
+                    <button
+                      onClick={cancelPhotoPreview}
+                      className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold rounded-lg transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {photoStatus === 'saved' ? 'Profile photo saved' : 'Upload a profile photo'}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {photoStatus === 'error'
+                      ? 'Upload failed — file may be too large or unsupported.'
+                      : 'JPG or PNG · Max 5MB · Square images work best'}
+                  </p>
+                  {photoStatus === 'error' && (
+                    <p className="text-xs text-red-600 font-medium mt-1">Try a smaller image (under 1MB recommended).</p>
+                  )}
+                  <div className="flex items-center gap-3 mt-3">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-lg transition shadow-sm"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {avatarUrl ? 'Change Photo' : 'Upload Photo'}
+                    </button>
+                    {avatarUrl && (
+                      <button
+                        onClick={removePhoto}
+                        className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 text-sm font-semibold rounded-lg transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
               <input
                 ref={fileInputRef}
                 type="file"

@@ -16,9 +16,13 @@ const createUserSchema = z.object({
   firstName:       z.string().min(1).optional(),
   lastName:        z.string().min(1).optional(),
   company:         z.string().optional(),
-  plan_tier:       z.string().optional().default('FREE'),
+  plan_tier:       z.string().optional().default('PROFESSIONAL'),
   plan_status:     z.string().optional().default('INACTIVE'),
   activation_code: z.string().max(32).optional(),
+  trial_days:      z.number().min(1).max(365).optional().default(7),
+
+  // ✅ user account role in main app
+  role:            z.enum(['USER', 'ADMIN', 'SUPER_ADMIN']).optional().default('USER'),
 });
 
 export async function GET(request: NextRequest) {
@@ -33,6 +37,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const tier   = searchParams.get('tier')   || '';
+    const paid   = searchParams.get('paid')   || '';
+    const is_active = searchParams.get('is_active');
+    const is_suspended = searchParams.get('is_suspended');
 
     const where: any = {};
 
@@ -43,8 +50,36 @@ export async function GET(request: NextRequest) {
         { company: { contains: search, mode: 'insensitive' } },
       ];
     }
-    if (status && status !== 'all') where.plan_status = { equals: status, mode: 'insensitive' };
-    if (tier   && tier   !== 'all') where.plan_tier   = { equals: tier,   mode: 'insensitive' };
+    
+    // Handle is_active and is_suspended for active filter
+    if (is_active !== null) {
+      where.is_active = is_active === 'true';
+    }
+    if (is_suspended !== null) {
+      where.is_suspended = is_suspended === 'true';
+    }
+    
+    // Handle status filter (for plan_status)
+    if (status && status !== 'all') {
+      if (status.toLowerCase() === 'suspended') {
+        where.is_suspended = true;
+      } else {
+        where.plan_status = { equals: status, mode: 'insensitive' };
+      }
+    }
+    
+    // Handle tier filter
+    if (tier && tier !== 'all' && tier !== '') {
+      where.plan_tier = { equals: tier, mode: 'insensitive' };
+    }
+    
+    // Handle paid filter (all non-free tiers)
+    // Fix: Use NOT with equals without mode parameter
+    if (paid === 'true') {
+      where.plan_tier = { 
+        not: 'FREE'
+      };
+    }
 
     const [users, total] = await Promise.all([
       prisma.user.findMany({
@@ -66,6 +101,9 @@ export async function GET(request: NextRequest) {
           last_login_at: true,
           is_active: true,
           is_suspended: true,
+
+          // ✅ include role in list response
+          role: true,
         },
         orderBy: { created_at: 'desc' },
       }),
@@ -114,6 +152,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ✅ Prevent privilege escalation:
+    // Only SUPER_ADMIN (admin portal) can create/assign ADMIN or SUPER_ADMIN user roles.
+    const requestedRole = data.role ?? 'USER';
+    const finalRole =
+      session.role === 'SUPER_ADMIN'
+        ? requestedRole
+        : 'USER';
+
     // ── 1. Create user — inactive until they click activation link ────────────
     // email_verified and password_hash are intentionally left null.
     // The user sets their password on the /activate page in the main app.
@@ -130,8 +176,9 @@ export async function POST(request: NextRequest) {
         is_active:    false,        // becomes true after activation
         is_suspended: false,
         updated_at:   new Date(),
-        // email_verified: left null — set during activation
-        // password_hash:  left null — set during activation
+
+        // ✅ user role in your main app
+        role:         finalRole,
       },
     });
 
@@ -166,7 +213,7 @@ export async function POST(request: NextRequest) {
       firstName:      data.firstName || resolvedName.split(' ')[0],
       company:        data.company,
       activationUrl,
-      planTier:       data.plan_tier || 'FREE',
+      planTier:       data.plan_tier || 'PROFESSIONAL',
       activationCode: data.activation_code,
       expiresIn:      '72 hours',
     }).catch(err => console.error('Activation email failed:', err));
@@ -186,8 +233,12 @@ export async function POST(request: NextRequest) {
         plan_tier:        data.plan_tier,
         plan_status:      'INACTIVE',
         activation_code:  data.activation_code  ?? null,
+        trial_days:       data.trial_days       ?? 7,
         created_by_admin: session.id,
         activation_sent:  true,
+
+        // ✅ include role in audit
+        role:             finalRole,
       },
     });
 

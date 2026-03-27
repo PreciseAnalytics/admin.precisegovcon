@@ -73,9 +73,9 @@ export async function POST(req: NextRequest) {
                style="display:inline-block;padding:14px 28px;background:#ea580c;color:#fff;font-weight:800;border-radius:8px;text-decoration:none;margin-top:16px;">
               Upgrade Before Your Trial Ends →
             </a>
-            <p style="margin-top:24px;font-size:12px;color:#94a3b8;">
-              © ${now.getFullYear()} Precise Analytics LLC · Virginia · VOSB · Minority-Owned
-            </p>
+              <p style="margin-top:24px;font-size:12px;color:#94a3b8;">
+                © ${now.getFullYear()} Precise Analytics LLC. All rights reserved.
+              </p>
           </div>`,
         text: `Hi ${c.name}, your PreciseGovCon trial ends in ${daysLeft} days. Upgrade at ${SITE_URL}/upgrade`,
       });
@@ -126,9 +126,9 @@ export async function POST(req: NextRequest) {
                style="display:inline-block;padding:14px 28px;background:#ea580c;color:#fff;font-weight:800;border-radius:8px;text-decoration:none;margin-top:16px;">
               Claim Your 7-Day Extension →
             </a>
-            <p style="margin-top:24px;font-size:12px;color:#94a3b8;">
-              © ${now.getFullYear()} Precise Analytics LLC · Virginia · VOSB · Minority-Owned
-            </p>
+              <p style="margin-top:24px;font-size:12px;color:#94a3b8;">
+                © ${now.getFullYear()} Precise Analytics LLC. All rights reserved.
+              </p>
           </div>`,
         text: `Hi ${c.name}, your trial ended. Claim a free 7-day extension at ${SITE_URL}/extend-trial`,
       });

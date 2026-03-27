@@ -748,9 +748,6 @@ CREATE INDEX "two_factor_backup_codes_code_idx" ON "two_factor_backup_codes"("co
 CREATE INDEX "two_factor_backup_codes_user_id_idx" ON "two_factor_backup_codes"("user_id" ASC);
 
 -- CreateIndex
-CREATE UNIQUE INDEX "users_auto_login_user_id_key" ON "users"("auto_login_user_id" ASC);
-
--- CreateIndex
 CREATE INDEX "users_email_idx" ON "users"("email" ASC);
 
 -- CreateIndex

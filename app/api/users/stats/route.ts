@@ -16,7 +16,7 @@ export async function GET() {
       statusGroups,
     ] = await Promise.all([
       prisma.user.count(),
-      prisma.user.count({ where: { is_active: true } }),
+      prisma.user.count({ where: { is_active: true, is_suspended: false } }),
       prisma.user.count({ where: { is_suspended: true } }),
       prisma.user.groupBy({
         by: ['plan_tier'],

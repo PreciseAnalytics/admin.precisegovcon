@@ -493,3 +493,139 @@ export async function sendAdminCreatedUserActivationEmail(options: {
 
   return result.success;
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// sendAbandonedSignup
+// Called by: app/api/cron/abandoned-signups/route.ts
+// Sends to users who created an account but never activated a trial or sub.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function sendAbandonedSignup(options: {
+  to: string;
+  name: string;
+}): Promise<{ success: boolean }> {
+  const { to, name } = options;
+  const SITE_URL   = process.env.NEXT_PUBLIC_MAIN_SITE_URL || 'https://precisegovcon.com';
+  const SIGNUP_URL = `${SITE_URL}/signup`;
+  const UNSUBSCRIBE_URL = `${SITE_URL}/unsubscribe?email=${encodeURIComponent(to)}`;
+  const firstName = name || 'there';
+
+  const subject = `You started signing up — finish in 60 seconds`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <div style="max-width:600px;margin:32px auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background:#1a3c5e;padding:28px 32px;">
+      <h1 style="color:#ffffff;font-size:22px;margin:0;">PreciseGovCon</h1>
+      <p style="color:#a8c4e0;font-size:13px;margin:4px 0 0;">Federal Contracting Intelligence</p>
+    </div>
+    <div style="padding:32px;color:#333333;font-size:15px;line-height:1.7;">
+      <h2 style="color:#1a3c5e;font-size:18px;margin-top:0;">Hi ${firstName},</h2>
+      <p>We noticed you started creating your PreciseGovCon account but didn't finish.</p>
+      <p>Your free trial is still waiting — no credit card needed. It takes less than 60 seconds to complete.</p>
+      <p>Here's what you'll unlock:</p>
+      <ul style="padding-left:20px;">
+        <li style="margin-bottom:6px;">📡 Live SAM.gov opportunity feed matched to your NAICS codes</li>
+        <li style="margin-bottom:6px;">🎯 AI-powered bid/no-bid scoring</li>
+        <li style="margin-bottom:6px;">📊 Pipeline tracking & team collaboration</li>
+      </ul>
+      <a href="${SIGNUP_URL}"
+         style="display:inline-block;margin:20px 0;padding:14px 28px;background:#f97316;color:#ffffff;font-weight:bold;font-size:15px;text-decoration:none;border-radius:6px;">
+        Complete My Account →
+      </a>
+      <p style="font-size:13px;color:#666;">Having trouble? Reply to this email and we'll help immediately.</p>
+    </div>
+    <div style="background:#f9f9f9;border-top:1px solid #e5e5e5;padding:20px 32px;font-size:12px;color:#888888;text-align:center;">
+      <p>© ${new Date().getFullYear()} PreciseGovCon · Federal Contracting Intelligence</p>
+      <p><a href="${UNSUBSCRIBE_URL}" style="color:#888888;">Unsubscribe</a> · <a href="https://precisegovcon.com/privacy" style="color:#888888;">Privacy Policy</a></p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = `Hi ${firstName},
+
+You started signing up for PreciseGovCon but didn't finish. Complete your account in 60 seconds:
+${SIGNUP_URL}
+
+Having trouble? Reply to this email and we'll help.
+
+To unsubscribe: ${UNSUBSCRIBE_URL}`;
+
+  return sendEmail({ to, subject, html, text });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sendColdOutreach
+// Called by: app/api/cron/cold-outreach/route.ts
+// Cold email to SAM-registered contractors who haven't been contacted yet.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function sendColdOutreach(options: {
+  to: string;
+  name: string;
+  company_name?: string;
+}): Promise<{ success: boolean }> {
+  const { to, name, company_name } = options;
+  const SITE_URL   = process.env.NEXT_PUBLIC_MAIN_SITE_URL || 'https://precisegovcon.com';
+  const SIGNUP_URL = `${SITE_URL}/signup`;
+  const UNSUBSCRIBE_URL = `${SITE_URL}/unsubscribe?email=${encodeURIComponent(to)}`;
+  const firstName  = name || 'there';
+  const companyStr = company_name ? `<strong>${company_name}</strong>` : 'your company';
+
+  const subject = company_name
+    ? `${company_name} is registered in SAM.gov — here's your edge`
+    : `You're registered in SAM.gov — here's how to win more contracts`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <div style="max-width:600px;margin:32px auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background:#1a3c5e;padding:28px 32px;">
+      <h1 style="color:#ffffff;font-size:22px;margin:0;">PreciseGovCon</h1>
+      <p style="color:#a8c4e0;font-size:13px;margin:4px 0 0;">Federal Contracting Intelligence</p>
+    </div>
+    <div style="padding:32px;color:#333333;font-size:15px;line-height:1.7;">
+      <h2 style="color:#1a3c5e;font-size:18px;margin-top:0;">Hi ${firstName},</h2>
+      <p>We noticed ${companyStr} is registered in SAM.gov — that means you're already set up to pursue federal contracts.</p>
+      <p>But registration alone won't win contracts. The companies that succeed use real-time opportunity intelligence to find solicitations before the competition and respond faster.</p>
+      <p>That's exactly what PreciseGovCon does:</p>
+      <ul style="padding-left:20px;">
+        <li style="margin-bottom:6px;">📡 Live SAM.gov opportunity feed matched to your NAICS codes</li>
+        <li style="margin-bottom:6px;">🎯 AI-powered bid/no-bid scoring</li>
+        <li style="margin-bottom:6px;">📄 Proposal generation tools</li>
+        <li style="margin-bottom:6px;">📊 Pipeline tracking &amp; team collaboration</li>
+      </ul>
+      <p>We're offering SAM-registered small businesses a free trial — no credit card required.</p>
+      <a href="${SIGNUP_URL}"
+         style="display:inline-block;margin:20px 0;padding:14px 28px;background:#f97316;color:#ffffff;font-weight:bold;font-size:15px;text-decoration:none;border-radius:6px;">
+        Start Your Free Trial →
+      </a>
+      <p style="font-size:13px;color:#666;">Takes 2 minutes. Cancel anytime.</p>
+    </div>
+    <div style="background:#f9f9f9;border-top:1px solid #e5e5e5;padding:20px 32px;font-size:12px;color:#888888;text-align:center;">
+      <p>© ${new Date().getFullYear()} PreciseGovCon · Federal Contracting Intelligence</p>
+      <p><a href="${UNSUBSCRIBE_URL}" style="color:#888888;">Unsubscribe</a> · <a href="https://precisegovcon.com/privacy" style="color:#888888;">Privacy Policy</a></p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = `Hi ${firstName},
+
+We noticed ${company_name || 'your company'} is registered in SAM.gov. That's a great first step toward federal contracting.
+
+PreciseGovCon helps SAM-registered businesses find and win federal contracts with live opportunity matching, AI scoring, and proposal tools.
+
+Start your free trial (no credit card): ${SIGNUP_URL}
+
+To unsubscribe: ${UNSUBSCRIBE_URL}`;
+
+  return sendEmail({ to, subject, html, text });
+}

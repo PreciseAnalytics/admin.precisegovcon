@@ -65,7 +65,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const res = await fetch('/api/auth/session');
       if (!res.ok) { router.push('/'); return; }
       const data = await res.json();
-      setAdmin(data.admin);
+
+      // ✅ Role gate added here
+      const a = data.admin;
+      if (!a) { router.push('/'); return; }
+      if (a.role !== 'ADMIN' && a.role !== 'SUPER_ADMIN') {
+        toast.error('Access denied — admin permissions required');
+        router.push('/');
+        return;
+      }
+
+      setAdmin(a);
     } catch {
       router.push('/');
     } finally {
@@ -429,7 +439,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <h4 className="text-[13px] font-black text-white uppercase tracking-wider">Account</h4>
               <ul className="space-y-3">
                 {[
-                  { href: '/dashboard/settings',          label: 'My Profile' },
+                  { href: '/dashboard/settings',           label: 'My Profile' },
                   { href: '/dashboard/settings#password', label: 'Change Password' },
                   { href: '/dashboard/settings#security', label: 'Security & 2FA' },
                   { href: '/dashboard/audit-logs',        label: 'Audit Logs' },

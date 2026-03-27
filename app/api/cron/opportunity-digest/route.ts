@@ -205,14 +205,15 @@ export async function GET(req: NextRequest) {
 
       await prisma.emailLog.create({
         data: {
-          id:            crypto.randomUUID(),
-          contractor_id: contractor.id,
+          id:              crypto.randomUUID(),
+          contractorId:    contractor.id,
+          email:           contractor.email,
           subject,
-          body:          html,
-          campaign_type: 'opportunity_digest',
-          status:        'sent',
-          resend_id:     result.data?.id || null,
-          sent_at:       new Date(),
+          campaign:        'opportunity_digest',
+          status:          'sent',
+          resendMessageId: result.data?.id || null,
+          sentAt:          new Date(),
+          metadata:        { html },
         },
       });
 

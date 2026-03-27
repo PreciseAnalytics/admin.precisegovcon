@@ -8,7 +8,11 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
-    await requireSession();
+    try {
+      await requireSession();
+    } catch {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const { searchParams } = new URL(request.url);
 
@@ -36,12 +40,23 @@ export async function GET(request: NextRequest) {
     // ── Build WHERE clause ─────────────────────────────────────────────────
     const where: any = {};
 
+    const legacySamSyncPlaceholder = {
+      OR: [
+        { uei_number: 'TEST-UEI-123' },
+        { email: 'test@contractor.com' },
+        { sam_gov_id: 'SAM-TEST-UEI-123' },
+        { name: { contains: 'Test Contractor', mode: 'insensitive' as const } },
+        { name: { startsWith: 'Test ', mode: 'insensitive' as const } },
+      ],
+    };
+
     if (testOnly) {
       // Test Mode: show ONLY test contractors
       where.is_test = true;
     } else if (!showTest) {
-      // Normal mode: hide test contractors (default)
-      where.is_test = false;
+      // Normal mode: hide explicit test contractors and the legacy SAM sync
+      // placeholder row that older dev builds could seed automatically.
+      where.NOT = [{ is_test: true }, legacySamSyncPlaceholder];
     }
     // showTest=true && testOnly=false: show all including test (mixed view)
 
@@ -109,9 +124,12 @@ export async function GET(request: NextRequest) {
         ],
         select: {
           id:                true,
+          sam_gov_id:        true,
           uei_number:        true,
+          cage_code:         true,
           name:              true,
           email:             true,
+          phone:             true,
           state:             true,
           naics_code:        true,
           business_type:     true,
@@ -129,6 +147,7 @@ export async function GET(request: NextRequest) {
           revenue:           true,
           last_contact:      true,
           created_at:        true,
+          synced_at:         true,
           is_test:           true,   // ← NEW
         },
       }),

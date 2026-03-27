@@ -19,15 +19,54 @@ const STAGE_ORDER: Record<Stage, number> = {
   lost:      -1,
 };
 
+const TEST_CONTRACTOR_LIKE = {
+  OR: [
+    { is_test: true },
+    { uei_number: 'TEST-UEI-123' },
+    { sam_gov_id: 'SAM-TEST-UEI-123' },
+    { email: 'test@contractor.com' },
+    { name: { contains: 'Test Contractor', mode: 'insensitive' as const } },
+    { name: { startsWith: 'Test ', mode: 'insensitive' as const } },
+  ],
+};
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const stage = searchParams.get('stage');
   const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 200);
   const page  = parseInt(searchParams.get('page') || '1', 10);
+  const search = searchParams.get('search')?.trim() || '';
+  const states = searchParams.get('states') || '';
+  const businessTypes = searchParams.get('businessTypes') || '';
+  const naics = searchParams.get('naics') || '';
+  const showTest = searchParams.get('showTest') === 'true';
+  const testOnly = searchParams.get('testOnly') === 'true';
 
   try {
+    const where: any = {};
+    if (testOnly) {
+      where.OR = [...(where.OR || []), ...TEST_CONTRACTOR_LIKE.OR];
+    } else if (!showTest) {
+      where.NOT = [TEST_CONTRACTOR_LIKE];
+    }
+    if (stage) where.pipeline_stage = stage;
+    if (states) where.state = { in: states.split(',').map(s => s.trim()).filter(Boolean) };
+    if (businessTypes) where.business_type = { in: businessTypes.split(',').map(s => s.trim()).filter(Boolean) };
+    if (naics) where.naics_code = { startsWith: naics };
+    if (search) {
+      where.OR = [
+        { name:       { contains: search, mode: 'insensitive' } },
+        { email:      { contains: search, mode: 'insensitive' } },
+        { state:      { contains: search, mode: 'insensitive' } },
+        { naics_code: { contains: search, mode: 'insensitive' } },
+        { uei_number: { contains: search, mode: 'insensitive' } },
+        { cage_code:  { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
     // ── Funnel summary ──────────────────────────────────────────────────────
     const stageCounts = await prisma.contractor.groupBy({
+      where,
       by:      ['pipeline_stage'],
       _count:  { id: true },
       orderBy: { pipeline_stage: 'asc' },
@@ -38,9 +77,30 @@ export async function GET(req: NextRequest) {
       count: stageCounts.find(sc => sc.pipeline_stage === s)?._count.id ?? 0,
     }));
 
-    // ── Contractors for selected stage ──────────────────────────────────────
-    const where = stage ? { pipeline_stage: stage } : {};
+    // ── Outreach stats ──────────────────────────────────────────────────────
+    // Include test contractors and test emails in all stats
+    const totalContractors = await prisma.contractor.count({});
+    // Contractors with at least one email log (including test)
+    const contacted = await prisma.contractor.count({
+      where: {
+        emailLogs: {
+          some: {},
+        },
+      },
+    });
+    // Contractors with enrolled true (including test)
+    const enrolled = await prisma.contractor.count({ where: { enrolled: true } });
+    // Contractors in progress (contacted but not enrolled, including test)
+    const inProgress = await prisma.contractor.count({
+      where: {
+        contacted: true,
+        enrolled: false,
+      },
+    });
+    // Conversion rate (enrolled / total, including test)
+    const successRate = totalContractors > 0 ? Math.round((enrolled / totalContractors) * 100) : 0;
 
+    // ── Contractors for selected stage ──────────────────────────────────────
     const [contractors, total] = await Promise.all([
       prisma.contractor.findMany({
         where,
@@ -51,9 +111,13 @@ export async function GET(req: NextRequest) {
           id:             true,
           name:           true,
           email:          true,
+          phone:          true,
           naics_code:     true,
           state:          true,
+          uei_number:     true,
+          cage_code:      true,
           business_type:  true,
+          registration_date: true,
           score:          true,
           priority:       true,
           pipeline_stage: true,
@@ -61,17 +125,32 @@ export async function GET(req: NextRequest) {
           enrolled:       true,
           last_contact:   true,
           created_at:     true,
-          email_logs: {
-            orderBy: { sent_at: 'desc' },
+          synced_at:      true,
+          is_test:        true,
+          emailLogs: {
+            orderBy: { sentAt: 'desc' },
             take:    1,
-            select:  { status: true, sent_at: true, subject: true },
+            select:  { status: true, sentAt: true, subject: true },
           },
         },
       }),
       prisma.contractor.count({ where }),
     ]);
 
-    return NextResponse.json({ funnel, contractors, total, page, limit });
+    return NextResponse.json({
+      funnel,
+      contractors,
+      total,
+      page,
+      limit,
+      stats: {
+        totalContractors,
+        contacted,
+        enrolled,
+        inProgress,
+        successRate,
+      },
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

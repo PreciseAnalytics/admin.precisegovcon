@@ -29,21 +29,94 @@ const BIZ_MAP: Record<string, string> = {
   A6:  'WOSB',
 };
 
+function normalizeNaicsCode(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length >= 2 && digits.length <= 6) return digits;
+  return /^\d{2,6}$/.test(raw) ? raw : null;
+}
+
+function pickPrimaryNaics(entries: any[]): string | null {
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+
+  const primary =
+    entries.find((entry: any) => entry?.naicsPrimary === 'Y' || entry?.isPrimary === true || entry?.primary === true) ||
+    entries[0];
+
+  if (!primary || typeof primary !== 'object') return normalizeNaicsCode(primary);
+
+  return (
+    normalizeNaicsCode(primary.naicsCode) ||
+    normalizeNaicsCode(primary.code) ||
+    normalizeNaicsCode(primary.value) ||
+    normalizeNaicsCode(primary.id)
+  );
+}
+
+function extractNaicsCode(entity: any): string | null {
+  const ass = entity?.assertions || {};
+  const goodsAndServices = ass.goodsAndServices || {};
+  const entityInfo = entity?.coreData?.entityInformation || {};
+
+  const listCandidates = [
+    goodsAndServices.naicsList,
+    goodsAndServices.naicsCode,
+    ass.naicsCode,
+    ass.naicsCodes,
+    entityInfo.naicsCode,
+    entityInfo.naicsCodes,
+  ];
+
+  for (const candidate of listCandidates) {
+    const listValue = Array.isArray(candidate) ? candidate : typeof candidate === 'object' && candidate ? [candidate] : null;
+    if (!listValue) continue;
+    const fromList = pickPrimaryNaics(listValue);
+    if (fromList) return fromList;
+  }
+
+  const scalarCandidates = [
+    goodsAndServices.primaryNaics,
+    goodsAndServices.primaryNaicsCode,
+    ass.primaryNaics,
+    ass.primaryNaicsCode,
+    entityInfo.primaryNaics,
+    entityInfo.primaryNaicsCode,
+    entity?.naicsCode,
+  ];
+
+  for (const candidate of scalarCandidates) {
+    const normalized = normalizeNaicsCode(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
 function transformEntity(entity: any) {
   const reg  = entity.entityRegistration || {};
   const addr = entity.coreData?.mailingAddress || {};
   const ass  = entity.assertions || {};
   const pocs = entity.pointsOfContact || {};
-
-  // SAM v3 returns NAICS inside assertions.naicsCode (array)
-  const naicsArr: any[] = ass.naicsCode || [];
-  const primaryNaics = naicsArr.find((n: any) => n.naicsPrimary === 'Y') || naicsArr[0];
-  const naics_code = primaryNaics?.naicsCode ? String(primaryNaics.naicsCode) : null;
+  const naics_code = extractNaicsCode(entity);
 
   const email: string =
     pocs.governmentBusinessPOC?.electronicAddress ||
     pocs.electronicBusinessPOC?.electronicAddress  ||
     pocs.pastPerformancePOC?.electronicAddress      ||
+    '';
+
+  const phone: string =
+    pocs.governmentBusinessPOC?.usPhone ||
+    pocs.governmentBusinessPOC?.phone ||
+    pocs.governmentBusinessPOC?.telephoneNumber ||
+    pocs.electronicBusinessPOC?.usPhone ||
+    pocs.electronicBusinessPOC?.phone ||
+    pocs.electronicBusinessPOC?.telephoneNumber ||
+    pocs.pastPerformancePOC?.usPhone ||
+    pocs.pastPerformancePOC?.phone ||
+    pocs.pastPerformancePOC?.telephoneNumber ||
     '';
 
   const bizList: string[] = (ass.businessTypes?.businessTypeList || [])
@@ -61,6 +134,7 @@ function transformEntity(entity: any) {
     uei_number,
     name:              reg.legalBusinessName || reg.dbaName || 'Unknown',
     email,
+    phone,
     sam_gov_id:        uei_number ? `SAM-${uei_number}` : '',
     cage_code,
     naics_code,
@@ -94,20 +168,21 @@ export async function GET(req: NextRequest) {
     activeOpportunityNaics = opps.map((o) => o.naics_code!).filter(Boolean);
   } catch { /* non-fatal */ }
 
-  // SAM v3 uses offset/limit pagination (NOT page/size)
+  // SAM entity API uses page/size pagination.
   const allEntities: ReturnType<typeof transformEntity>[] = [];
-  let offset = 0;
+  const pageSize = 10;
+  let page   = 0;
   let total  = Infinity;
 
   try {
-    while (offset < total && allEntities.length < maxRecords) {
+    while (page * pageSize < total && allEntities.length < maxRecords) {
       const params = new URLSearchParams({
         api_key:            apiKey,
         registrationDate:   `[${fmtSamDate(fromDate)},${fmtSamDate(toDate)}]`,
         registrationStatus: 'A',
         includeSections:    'entityRegistration,coreData,assertions,pointsOfContact',
-        limit:              '100',
-        offset:             String(offset),
+        size:               String(pageSize),
+        page:               String(page),
       });
 
       const res = await fetch(`${SAM_BASE}?${params}`, {
@@ -132,14 +207,15 @@ export async function GET(req: NextRequest) {
         ...(entities.map(transformEntity) as TE[]).filter((r: TE) => r.uei_number)
       );
 
-      offset += 100;
-      if (entities.length < 100) break;
+      page += 1;
+      if (entities.length < pageSize) break;
       await new Promise((r) => setTimeout(r, 250));
     }
 
-    let newCount = 0, updateCount = 0;
+    let newCount = 0, updateCount = 0, missingNaicsCount = 0;
 
     for (const record of allEntities) {
+      if (!record.naics_code) missingNaicsCount++;
       const scoringInput: ScoringInput = {
         email:             record.email,
         naics_code:        record.naics_code,
@@ -154,7 +230,7 @@ export async function GET(req: NextRequest) {
 
       const existing = await prisma.contractor.findUnique({
         where: { uei_number: record.uei_number },
-        select: { id: true },
+        select: { id: true, naics_code: true },
       });
 
       if (!existing) {
@@ -180,9 +256,10 @@ export async function GET(req: NextRequest) {
           data: {
             name:              record.name,
             email:             record.email,
+            phone:             record.phone,
             sam_gov_id:        record.sam_gov_id,
             cage_code:         record.cage_code,
-            naics_code:        record.naics_code,
+            naics_code:        record.naics_code ?? existing.naics_code,
             state:             record.state,
             business_type:     record.business_type,
             registration_date: record.registration_date,
@@ -217,6 +294,7 @@ export async function GET(req: NextRequest) {
       newRecords:     newCount,
       updatedRecords: updateCount,
       total:          total === Infinity ? 0 : total,
+      missingNaicsCount,
       dateRange:      { from: fmtSamDate(fromDate), to: fmtSamDate(toDate) },
       durationMs:     Date.now() - startMs,
     });
@@ -278,6 +356,9 @@ export async function POST(req: NextRequest) {
       ];
     }
 
+    // Debug logging
+    console.log('[POST /api/sam/contractors] where:', JSON.stringify(where));
+
     const [contractors, total] = await Promise.all([
       prisma.contractor.findMany({
         where,
@@ -285,8 +366,8 @@ export async function POST(req: NextRequest) {
         skip:  (page - 1) * limit,
         take:  limit,
         include: {
-          email_logs: {
-            orderBy: { sent_at: 'desc' },
+          emailLogs: {
+            orderBy: { sentAt: 'desc' },
             take: 3,
           },
         },
@@ -294,8 +375,11 @@ export async function POST(req: NextRequest) {
       prisma.contractor.count({ where }),
     ]);
 
+    console.log(`[POST /api/sam/contractors] returned ${contractors.length} contractors, total: ${total}`);
+
     return NextResponse.json({ contractors, total, page, limit });
   } catch (err: any) {
+    console.error('[POST /api/sam/contractors] error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

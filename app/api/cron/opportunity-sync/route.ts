@@ -1,25 +1,16 @@
 // app/api/cron/opportunity-sync/route.ts
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Syncs active SAM.gov opportunities → cached_opportunities table.
 // Runs nightly at 2 AM UTC so neither the admin portal NOR the consumer app
 // ever hits SAM.gov live on user actions — both read from this cache instead.
-//
-// Schedule (vercel.json): "0 2 * * *" — daily at 2 AM UTC
-// Manual trigger: GET /api/cron/opportunity-sync
-//                 POST /api/cron/opportunity-sync { naics, limit, dry }
-// Authorization: Bearer
-//
-// Admin reads from:    GET /api/opportunities/cached
-// Consumer app reads from: GET /api/opportunities/cached (same endpoint)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getNAICSByCode } from '@/lib/naics-codes';
 
 const SAM_OPPS_BASE = 'https://api.sam.gov/opportunities/v2/search';
 
-// ── Format date as MM/dd/yyyy (SAM.gov required format) ───────────────────────
 function fmt(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
@@ -27,11 +18,20 @@ function fmt(d: Date): string {
   return `${mm}/${dd}/${yyyy}`;
 }
 
-// ── Transform SAM.gov response → DB row ───────────────────────────────────────
 function transformOpportunity(opp: any) {
+  // SAM.gov Opportunities API v2 returns NAICS in multiple possible structures.
+  // The entity API and opportunity API have DIFFERENT schemas — this handles both.
   const naics =
+    // Opportunity API v2 most common: plain string
+    (typeof opp.naicsCode === 'string' && opp.naicsCode.trim() ? opp.naicsCode.trim() : null) ||
+    // Nested object with naicsCodes array (entity API style)
     opp.naicsCode?.naicsCodes?.[0]?.code ||
     opp.naicsCode?.code ||
+    // Some opportunity records use classificationCode
+    opp.classificationCode ||
+    // Other known field paths
+    opp.naics ||
+    opp.naicsCode?.value ||
     null;
 
   const setAside =
@@ -44,6 +44,17 @@ function transformOpportunity(opp: any) {
     opp.archiveDate ||
     null;
 
+  // FIX: business_state must be a string or null — never an object.
+  // opp.placeOfPerformance?.state can be an object like { code: "VA", name: "Virginia" }
+  // which Prisma rejects. Always extract the string code explicitly.
+  const rawState =
+    opp.placeOfPerformance?.state?.code ||
+    opp.placeOfPerformanceState?.code ||
+    (typeof opp.placeOfPerformance?.state === 'string' ? opp.placeOfPerformance.state : null) ||
+    (typeof opp.placeOfPerformanceState === 'string' ? opp.placeOfPerformanceState : null) ||
+    (typeof opp.state === 'string' ? opp.state : null) ||
+    null;
+
   return {
     sam_notice_id: opp.noticeId || opp.id || '',
     title: opp.title || 'Untitled',
@@ -53,6 +64,7 @@ function transformOpportunity(opp: any) {
       opp.departmentName ||
       '',
     naics_code: naics,
+    naics_definition: naics ? (getNAICSByCode(String(naics))?.title || null) : null,
     solicitation_number: opp.solicitationNumber || '',
     opportunity_type: opp.type || opp.baseType || 'Solicitation',
     set_aside: setAside,
@@ -63,6 +75,7 @@ function transformOpportunity(opp: any) {
       opp.awardAmount != null
         ? `$${Number(opp.awardAmount).toLocaleString()}`
         : null,
+    business_state: rawState,
     url:
       opp.uiLink ||
       (opp.noticeId ? `https://sam.gov/opp/${opp.noticeId}/view` : null),
@@ -71,7 +84,6 @@ function transformOpportunity(opp: any) {
   };
 }
 
-// ── Shared sync logic (called by both GET and POST) ──────────────────────────
 async function runSync(opts: {
   naicsFilter?: string;
   limitOverride?: number;
@@ -88,9 +100,6 @@ async function runSync(opts: {
   const { naicsFilter, limitOverride, dryRun = false } = opts;
   const startMs = Date.now();
 
-  // ── Build NAICS list ────────────────────────────────────────────────────────
-  // If not specified, pull distinct codes from our contractor DB so we only
-  // fetch opportunities relevant to contractors we're actually outreaching to.
   let naicsCodes: string[] = [];
 
   if (naicsFilter) {
@@ -108,7 +117,6 @@ async function runSync(opts: {
       console.warn('[opp-sync] Could not load NAICS from DB:', e);
     }
 
-    // Fallback to core NAICS codes if DB is empty
     if (naicsCodes.length === 0) {
       naicsCodes = [
         '541511', '541512', '541519', '541611',
@@ -122,11 +130,9 @@ async function runSync(opts: {
     `[opp-sync] Syncing ${naicsCodes.length} NAICS codes: ${naicsCodes.slice(0, 6).join(', ')}...`
   );
 
-  // ── Date window: past 90 days → today ──────────────────────────────────────
   const today = new Date();
   const ninetyDaysAgo = new Date(Date.now() - 90 * 86_400_000);
 
-  // ── Fetch from SAM.gov ──────────────────────────────────────────────────────
   const allOpps: ReturnType<typeof transformOpportunity>[] = [];
   let errors = 0;
 
@@ -136,8 +142,8 @@ async function runSync(opts: {
         api_key: apiKey,
         ptype: 'o,p,k,r,s,g,i',
         ncode: naics,
-        postedFrom: fmt(ninetyDaysAgo), // e.g. "11/23/2025"
-        postedTo: fmt(today),           // e.g. "02/21/2026"
+        postedFrom: fmt(ninetyDaysAgo),
+        postedTo: fmt(today),
         limit: String(Math.min(limitOverride || 100, 1000)),
         offset: '0',
         active: 'Yes',
@@ -179,7 +185,6 @@ async function runSync(opts: {
       allOpps.push(...transformed);
       console.log(`[opp-sync] NAICS ${naics}: ${transformed.length} opportunities`);
 
-      // 1 request/second to stay inside SAM.gov rate limit
       await new Promise((r) => setTimeout(r, 1100));
     } catch (e: any) {
       if (e.name === 'TimeoutError') {
@@ -193,12 +198,9 @@ async function runSync(opts: {
 
   console.log(`[opp-sync] Fetched ${allOpps.length} total opportunities`);
 
-  // ── Write to DB ──────────────────────────────────────────────────────────────
-  let upserted = 0,
-    skipped = 0;
+  let upserted = 0, skipped = 0;
 
   if (!dryRun && allOpps.length > 0) {
-    // Mark all existing active records as stale first
     try {
       await prisma.cachedOpportunity.updateMany({
         where: { active: true },
@@ -220,6 +222,8 @@ async function runSync(opts: {
             solicitation_number: opp.solicitation_number,
             opportunity_type: opp.opportunity_type,
             set_aside: opp.set_aside,
+            business_state: opp.business_state,
+            naics_definition: opp.naics_definition,
             posted_date: opp.posted_date,
             response_deadline: opp.response_deadline,
             description: opp.description,
@@ -237,7 +241,6 @@ async function runSync(opts: {
     }
   } else if (dryRun) {
     upserted = allOpps.length;
-    console.log(`[opp-sync] DRY RUN — would upsert ${allOpps.length} opportunities`);
   } else if (allOpps.length === 0) {
     console.warn('[opp-sync] No opportunities fetched — DB not updated');
   }
@@ -255,7 +258,6 @@ async function runSync(opts: {
   });
 }
 
-// ── GET: called by Vercel cron scheduler ─────────────────────────────────────
 export async function GET(request: NextRequest) {
   const auth = request.headers.get('authorization');
   const isCron = request.headers.get('x-vercel-cron') === '1';
@@ -275,7 +277,6 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// ── POST: called manually from admin UI ──────────────────────────────────────
 export async function POST(request: NextRequest) {
   const auth = request.headers.get('authorization');
   const isCron = request.headers.get('x-vercel-cron') === '1';

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, MouseEvent } from 'react';
+import React, { useMemo, useState, MouseEvent, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -13,6 +13,11 @@ import {
   Box,
   Container,
   Badge,
+  Menu as MuiMenu,
+  List,
+  ListItem,
+  ListItemText,
+  CircularProgress,
   useTheme,
   alpha
 } from '@mui/material';
@@ -132,12 +137,43 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + '/');
 }
 
+const NOTIFICATION_LABELS: Record<string, string> = {
+  USER_SIGNUP: 'New user signup',
+  USER_PASSWORD_RESET: 'User password reset',
+  USER_PLAN_UPGRADE: 'Plan upgraded',
+  MARKETING_CAMPAIGN: 'Marketing campaign',
+  USER_INVITE: 'User invited',
+  USER_UPDATE: 'User updated',
+  USER_DELETE: 'User deleted',
+};
+
 const Header = () => {
   const theme = useTheme();
   const pathname = usePathname();
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState<null | HTMLElement>(null);
+  const [notifAnchor, setNotifAnchor] = useState<null | HTMLElement>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+  // Fetch notifications when menu opens
+  useEffect(() => {
+    if (notifAnchor) {
+      setNotifLoading(true);
+      fetch('/api/notifications')
+        .then((res) => res.json())
+        .then((data) => {
+          setNotifications(data.notifications || []);
+        })
+        .finally(() => setNotifLoading(false));
+    }
+  }, [notifAnchor]);
+  const handleNotifOpen = (event: MouseEvent<HTMLElement>) => {
+    setNotifAnchor(event.currentTarget);
+  };
+  const handleNotifClose = () => {
+    setNotifAnchor(null);
+  };
 
   const navItems: NavItem[] = useMemo(
     () => [
@@ -246,11 +282,48 @@ const Header = () => {
             </IconButtonStyled>
 
             {/* Notifications */}
-            <IconButtonStyled size="large" aria-label="notifications">
-              <Badge badgeContent={4} color="warning">
+
+            {/* Notifications */}
+            <IconButtonStyled size="large" aria-label="notifications" onClick={handleNotifOpen}>
+              <Badge badgeContent={notifications.length || 0} color="warning">
                 <NotificationsIcon />
               </Badge>
             </IconButtonStyled>
+            <MuiMenu
+              anchorEl={notifAnchor}
+              open={Boolean(notifAnchor)}
+              onClose={handleNotifClose}
+              PaperProps={{ sx: { minWidth: 340, maxWidth: 400, maxHeight: 420, p: 0 } }}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            >
+              <Box sx={{ p: 2, pb: 1, fontWeight: 900, fontSize: '1.1rem' }}>Notifications</Box>
+              {notifLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                  <CircularProgress size={28} />
+                </Box>
+              ) : notifications.length === 0 ? (
+                <Box sx={{ p: 3, color: 'text.secondary', textAlign: 'center' }}>No recent activity.</Box>
+              ) : (
+                <List dense disablePadding>
+                  {notifications.map((n) => (
+                    <ListItem key={n.id} alignItems="flex-start" divider>
+                      <ListItemText
+                        primary={NOTIFICATION_LABELS[n.action] || n.action}
+                        secondary={
+                          <>
+                            <span style={{ fontWeight: 700 }}>{n.entityType}</span>
+                            {n.entityId ? `: ${n.entityId}` : ''}
+                            <br />
+                            <span style={{ color: '#64748b', fontSize: 12 }}>{new Date(n.createdAt).toLocaleString()}</span>
+                          </>
+                        }
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </MuiMenu>
 
             {/* Profile */}
             <ProfileContainer onClick={handleProfileMenuOpen}>

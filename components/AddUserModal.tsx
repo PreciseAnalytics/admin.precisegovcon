@@ -205,7 +205,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
 
-      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-y-auto border border-slate-100">
+      <form onSubmit={handleSubmit} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-y-auto border border-slate-100">
 
         {/* Header */}
         <div className="sticky top-0 z-10 bg-white flex items-center justify-between px-8 py-5 border-b border-slate-100 rounded-t-3xl">
@@ -218,7 +218,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-8 py-7 space-y-7">
+        <div className="px-8 py-7 space-y-7">
 
           {/* Error */}
           {error && (
@@ -411,8 +411,8 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
               }
             </button>
           </div>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
 }
