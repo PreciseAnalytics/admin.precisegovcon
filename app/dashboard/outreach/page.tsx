@@ -3786,6 +3786,7 @@ export default function OutreachPage() {
                         <RefreshCw className={`w-4 h-4 text-slate-500 ${pipelineLoading ? 'animate-spin' : ''}`} />
                       </button>
                     </div>
+                  </div>
 
                   <div className="rounded-2xl border border-orange-200 bg-orange-50 px-5 py-4 shadow-sm">
                     <div className="flex items-center justify-between gap-4 flex-wrap">
