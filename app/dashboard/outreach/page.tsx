@@ -321,6 +321,21 @@ const PILL_CONFIG = {
   success:   { sublabel: 'Conversion',          icon: TrendingUp,   activeBg: 'bg-violet-600',  activeText: 'text-white', activeIconBg: 'bg-violet-400',   activeBorder: 'border-violet-500',  inactiveHover: 'hover:border-violet-300',  sectionBg: 'bg-violet-50',  sectionBorder: 'border-violet-200',  sectionTitle: 'text-violet-800' },
 };
 
+// Helper: detect test/fake email addresses
+const isTestEmailAddress = (email?: string) => {
+  if (!email) return false;
+  const e = email.toLowerCase();
+  return (
+    e.includes('test@') ||
+    e.endsWith('@example.com') ||
+    e.endsWith('@test.com') ||
+    e.endsWith('@contractor.com') ||
+    e === 'noemail@none.com' ||
+    e.includes('fake@') ||
+    e.includes('temp@')
+  );
+};
+
 const US_STATES = ['AL','AK','AS','AZ','AR','CA','CO','CT','DC','DE','FL','FM','GA','GU','HI','IA','ID','IL','IN','KS','KY','LA','MA','MD','ME','MH','MI','MN','MO','MP','MS','MT','NC','ND','NE','NH','NJ','NM','NV','NY','OH','OK','OR','PA','PR','PW','RI','SC','SD','TN','TX','UM','UT','VA','VI','VT','WA','WI','WV','WY'];
 const BIZ_TYPES  = ['Small Business','Woman-Owned','Veteran-Owned','HUBZone','8(a) Certified','Minority-Owned','Service-Disabled Veteran-Owned'];
 const COMPANY_AUDIENCE_OPTIONS: Array<{
@@ -635,6 +650,7 @@ export default function OutreachPage() {
   const [pipelineEntities, setPipelineEntities] = useState<PipelineEntity[]>([]);
   const [pipelineQueue,    setPipelineQueue]    = useState<any[]>([]);
   const [pipelineLoading,  setPipelineLoading]  = useState(false);
+  const [pipelineHeroCollapsed, setPipelineHeroCollapsed] = useState(false);
   const [pipelineRunState, setPipelineRunState] = useState<Partial<Record<PipelineStep, PipelineStepState>>>({});
   const [pipelineActiveStep, setPipelineActiveStep] = useState<PipelineStep | null>(null);
   const [latestIngestRun, setLatestIngestRun] = useState<IngestionRunSummary | null>(null);
@@ -2164,7 +2180,7 @@ export default function OutreachPage() {
                                     }} className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer" />
                                   </td>
                                   <td className="px-3 py-2.5 cursor-pointer" onClick={() => openDrawer(c)}>
-                                    <p className="font-bold text-xs text-slate-900 leading-tight truncate max-w-[200px]">{c.name}</p>
+                                    <p className="font-bold text-sm text-slate-900 leading-tight truncate max-w-[200px]">{c.name}</p>
                                     <p className="text-xs text-slate-400 truncate max-w-[200px]">{c.business_type || 'Small Business'}</p>
                                     {c.business_type && c.business_type !== 'Small Business' && (
                                       <span className={`text-xs px-1.5 py-0.5 rounded font-semibold mt-0.5 inline-block ${bizBadge(c.business_type)}`}>{c.business_type}</span>
@@ -2504,7 +2520,7 @@ export default function OutreachPage() {
         {activeTab === 'outreach' && (
           <>
             {/* Stat Pills */}
-            <div className="grid grid-cols-5 gap-5 mb-8">
+            <div className="flex flex-wrap gap-2 mb-4">
               {(['total', 'contacted', 'enrolled', 'inProgress', 'success'] as FilterView[]).map(view => {
                 const c = PILL_CONFIG[view]; const Icon = c.icon; const isActive = filterView === view;
                 let count = 0;
@@ -2519,23 +2535,16 @@ export default function OutreachPage() {
                   <button
                     key={view}
                     onClick={() => setFilterView(view)}
-                    className={`px-5 py-4 rounded-2xl border-2 transition-all shadow-sm text-left ${
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-all text-left text-xs font-semibold leading-none ${
                       isActive
-                        ? `${c.activeBg} ${c.activeText} ${c.activeBorder} shadow-lg`
+                        ? `${c.activeBg} ${c.activeText} ${c.activeBorder} border-transparent`
                         : `bg-white border-slate-200 ${c.inactiveHover} text-slate-700`
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isActive ? c.activeIconBg : 'bg-slate-100'}`}>
-                        <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                      </div>
-                      <div>
-                        <p className={`text-xs font-semibold ${isActive ? 'text-white/80' : 'text-slate-500'}`}>{c.sublabel}</p>
-                        <p className={`text-2xl font-black tracking-tight mt-0.5 ${isActive ? 'text-white' : 'text-slate-900'}`}>
-                          {view === 'success' ? `${count}%` : count.toLocaleString()}
-                        </p>
-                      </div>
+                    <div className={`w-3.5 h-3.5 rounded flex items-center justify-center flex-shrink-0 ${isActive ? c.activeIconBg : 'bg-slate-100'}`}>
+                      <Icon className={`w-2.5 h-2.5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
                     </div>
+                    <span>{view === 'success' ? `${count}%` : count.toLocaleString()}</span>
                   </button>
                 );
               })}
@@ -3621,18 +3630,28 @@ export default function OutreachPage() {
 
               return (
                 <>
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex-1">
                       <h2 className="text-3xl md:text-4xl font-black tracking-tight text-slate-900">Daily Lead Pipeline</h2>
-                      <div className="flex flex-wrap items-center gap-3 mt-2">
-                        <p className="text-base md:text-lg text-slate-600 font-semibold">Pull companies registered {selectedDaysFrom}-{selectedDaysTo} days ago, enrich weekly using public web and government data, and queue only confirmed emails.</p>
-                        <span className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-bold text-orange-800">
-                          Recommended Order:
-                          <span className="text-slate-900">Ingest {'->'} Enrich {'->'} Score {'->'} Queue</span>
-                        </span>
-                      </div>
+                      {!pipelineHeroCollapsed && (
+                        <div className="flex flex-wrap items-center gap-3 mt-2">
+                          <p className="text-base md:text-lg text-slate-600 font-semibold">Pull companies registered {selectedDaysFrom}-{selectedDaysTo} days ago, enrich weekly using public web and government data, and queue only confirmed emails.</p>
+                          <span className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-bold text-orange-800">
+                            Recommended Order:
+                            <span className="text-slate-900">Ingest {'->'} Enrich {'->'} Score {'->'} Queue</span>
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPipelineHeroCollapsed(!pipelineHeroCollapsed)}
+                      className="p-2 rounded-lg hover:bg-slate-100 transition flex-shrink-0 ml-4"
+                      title={pipelineHeroCollapsed ? 'Show instructions' : 'Hide instructions'}
+                    >
+                      <ChevronDown className={`w-5 h-5 text-slate-500 transition ${pipelineHeroCollapsed ? '-rotate-90' : ''}`} />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
                       <button disabled={pipelineLoading || ingestWindowInvalid} onClick={runDailyFlow} className="px-5 py-3 bg-orange-600 text-white rounded-xl text-base font-black hover:bg-orange-700 disabled:opacity-60 shadow-sm">{pipelineLoading && !pipelineActiveStep ? 'Running...' : 'Run Daily Flow'}</button>
                       <button disabled={pipelineLoading || ingestWindowInvalid} onClick={() => runPipelineStep('ingest')} className="px-5 py-3 bg-slate-900 text-white rounded-xl text-base font-black hover:bg-slate-800 disabled:opacity-60 shadow-sm">{pipelineActiveStep === 'ingest' ? 'Running Ingest...' : 'Run Ingest'}</button>
                       <button disabled={pipelineLoading} onClick={() => runPipelineStep('enrich')} className="px-5 py-3 bg-cyan-600 text-white rounded-xl text-base font-black hover:bg-cyan-700 disabled:opacity-60 shadow-sm">{pipelineActiveStep === 'enrich' ? 'Running Enrich...' : 'Run Enrich'}</button>
@@ -3642,14 +3661,14 @@ export default function OutreachPage() {
                         <RefreshCw className={`w-4 h-4 text-slate-500 ${pipelineLoading ? 'animate-spin' : ''}`} />
                       </button>
                     </div>
-                  </div>
 
-                  <div className="rounded-2xl border border-orange-200 bg-orange-50 px-5 py-4 shadow-sm">
-                    <div className="flex items-center justify-between gap-4 flex-wrap">
-                      <div>
-                        <p className="text-sm font-black text-orange-900">Ingest Window</p>
-                        <p className="text-xs text-orange-800 mt-1">Older firms often have better public web presence. Try a wider or older range to improve phone and email odds.</p>
-                      </div>
+                  {!pipelineHeroCollapsed && (
+                    <div className="rounded-2xl border border-orange-200 bg-orange-50 px-5 py-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                        <div>
+                          <p className="text-sm font-black text-orange-900">Ingest Window</p>
+                          <p className="text-xs text-orange-800 mt-1">Older firms often have better public web presence. Try a wider or older range to improve phone and email odds.</p>
+                        </div>
                       <span className="inline-flex items-center rounded-xl bg-white border border-orange-200 px-3 py-1.5 text-xs font-black text-orange-800">
                         {ingestPresetLabel}
                       </span>
@@ -3704,18 +3723,20 @@ export default function OutreachPage() {
                       </div>
                     </div>
                     <p className={`text-xs mt-3 font-semibold ${ingestWindowInvalid ? 'text-red-600' : 'text-orange-800'}`}>
-                      {ingestWindowInvalid
-                        ? 'Set the newer bound to a smaller number than the older bound.'
-                        : `Current ingest target: companies registered roughly ${selectedDaysFrom} to ${selectedDaysTo} days ago.`}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3">
-                      <FileText className="w-4 h-4 text-slate-500" />
-                      <p className="text-sm font-black text-slate-900">Action Legend</p>
+                        {ingestWindowInvalid
+                          ? 'Set the newer bound to a smaller number than the older bound.'
+                          : `Current ingest target: companies registered roughly ${selectedDaysFrom} to ${selectedDaysTo} days ago.`}
+                      </p>
                     </div>
-                    <p className="text-sm text-slate-600 font-semibold mb-3">Use `Run Daily Flow` when you want the safe default. Use individual buttons only when re-running a specific step.</p>
+                  )}
+
+                  {!pipelineHeroCollapsed && (
+                    <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <FileText className="w-4 h-4 text-slate-500" />
+                        <p className="text-sm font-black text-slate-900">Action Legend</p>
+                      </div>
+                      <p className="text-sm text-slate-600 font-semibold mb-3">Use `Run Daily Flow` when you want the safe default. Use individual buttons only when re-running a specific step.</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
                       {[
                         { label: 'Run Daily Flow', detail: 'Runs ingest, enrich, score, and queue in sequence.' },
@@ -3730,7 +3751,8 @@ export default function OutreachPage() {
                         </div>
                       ))}
                     </div>
-                  </div>
+                    </div>
+                  )}
 
                   {pipelineActiveStep && (
                     <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-5 py-4">
@@ -4607,32 +4629,32 @@ export default function OutreachPage() {
                     : null;
 
                   return (
-                    <div key={tpl.id} className="bg-white rounded-2xl border border-slate-200 p-6 hover:border-slate-300 hover:shadow-md transition group">
-                      <div className="flex items-start justify-between mb-3">
+                    <div key={tpl.id} className="bg-white rounded-2xl border border-slate-200 p-6 hover:border-slate-300 hover:shadow-lg transition group">
+                      <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${catCfg.color}`}><CI className="w-3 h-3" />{catCfg.label}</span>
-                          {tpl.aiGenerated && <span className="text-xs font-bold bg-violet-100 text-violet-800 px-2 py-0.5 rounded-full">AI</span>}
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 ${catCfg.color}`}><CI className="w-3.5 h-3.5" />{catCfg.label}</span>
+                          {tpl.aiGenerated && <span className="text-xs font-bold bg-violet-100 text-violet-700 px-2.5 py-1 rounded-full">✨ AI</span>}
                           {linkedCode && (
-                            <span className={`text-xs font-black font-mono px-2 py-0.5 rounded-full flex items-center gap-1 ${linkedCode.isAvailable ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>
-                              <Tag className="w-2.5 h-2.5" />
+                            <span className={`text-xs font-black font-mono px-2.5 py-1 rounded-full flex items-center gap-1.5 ${linkedCode.isAvailable ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                              <Tag className="w-3 h-3" />
                               {linkedCode.code}
                               {!linkedCode.isAvailable && ' ⚠'}
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                          <button onClick={() => { setEditTpl({ ...tpl }); setShowTplModal(true); }} className="p-1.5 rounded-lg hover:bg-slate-100"><Edit3 className="w-4 h-4 text-slate-400" /></button>
-                          <button onClick={() => { setCurTemplate(tpl); setShowTplPanel(true); setActiveTab('outreach'); }} className="p-1.5 rounded-lg hover:bg-slate-100"><Eye className="w-4 h-4 text-slate-400" /></button>
+                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition">
+                          <button onClick={() => { setEditTpl({ ...tpl }); setShowTplModal(true); }} className="p-2 rounded-lg hover:bg-slate-100"><Edit3 className="w-4 h-4 text-slate-500" /></button>
+                          <button onClick={() => { setCurTemplate(tpl); setShowTplPanel(true); setActiveTab('outreach'); }} className="p-2 rounded-lg hover:bg-slate-100"><Eye className="w-4 h-4 text-slate-500" /></button>
                           <button onClick={async () => {
                             const res = await fetch(`/api/outreach/templates?id=${tpl.id}`, { method: 'DELETE' });
                             if (res.ok) fetchTemplates();
                             else notify('Failed to delete template', 'error');
-                          }} className="p-1.5 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4 text-slate-400 hover:text-red-500" /></button>
+                          }} className="p-2 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4 text-slate-400 hover:text-red-600" /></button>
                         </div>
                       </div>
-                      <h3 className="font-black text-slate-900 text-sm mb-1">{tpl.name}</h3>
-                      <p className="text-xs text-slate-500 font-medium mb-2 line-clamp-1">{tpl.subject}</p>
-                      <p className="text-xs text-slate-400 line-clamp-2">{tpl.body.slice(0, 120)}...</p>
+                      <h3 className="font-black text-slate-900 text-base mb-2">{tpl.name}</h3>
+                      <p className="text-sm text-slate-700 font-semibold mb-2.5 line-clamp-1">{tpl.subject}</p>
+                      <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed">{tpl.body.slice(0, 120)}...</p>
 
                       {/* Offer code activation stats */}
                       {linkedCode && (
@@ -5009,7 +5031,7 @@ export default function OutreachPage() {
                 </div>
               ) : (
                 <div className="divide-y divide-slate-50">
-                  {emailLogs.map(log => {
+                  {emailLogs.filter(log => !isTestEmailAddress(log.contractor_email)).map(log => {
                     const statusCfg: Record<string, { bg: string; text: string; label: string }> = {
                       sent:    { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Delivered' },
                       pending: { bg: 'bg-yellow-100',  text: 'text-yellow-700',  label: 'Pending' },
