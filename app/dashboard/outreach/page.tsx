@@ -451,13 +451,13 @@ const getCampaignFolder = (c: Contractor): OutreachFolder => {
   return 'waiting';
 };
 const folderMeta: Record<OutreachFolder, { label: string; accent: string; tone: string }> = {
-  newToday:   { label: 'New Today',     accent: 'bg-emerald-600 text-white', tone: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
-  readyCold:  { label: 'Ready for Cold',accent: 'bg-slate-800 text-white',   tone: 'text-slate-700 bg-slate-50 border-slate-200' },
-  followUpDue:{ label: 'Follow-Up Due', accent: 'bg-amber-500 text-white',   tone: 'text-amber-700 bg-amber-50 border-amber-200' },
-  waiting:    { label: 'Waiting',       accent: 'bg-blue-600 text-white',    tone: 'text-blue-700 bg-blue-50 border-blue-200' },
-  converted:  { label: 'Converted',     accent: 'bg-violet-600 text-white',  tone: 'text-violet-700 bg-violet-50 border-violet-200' },
-  noEmail:    { label: 'Needs Enrichment', accent: 'bg-rose-600 text-white', tone: 'text-rose-700 bg-rose-50 border-rose-200' },
-  all:        { label: 'All Contractors', accent: 'bg-slate-700 text-white', tone: 'text-slate-700 bg-slate-50 border-slate-200' },
+  newToday:   { label: 'New Today',     accent: 'bg-emerald-600 text-white', tone: 'bg-white border-slate-200 text-slate-700' },
+  readyCold:  { label: 'Ready for Cold',accent: 'bg-slate-800 text-white',   tone: 'bg-white border-slate-200 text-slate-700' },
+  followUpDue:{ label: 'Follow-Up Due', accent: 'bg-amber-500 text-white',   tone: 'bg-white border-slate-200 text-slate-700' },
+  waiting:    { label: 'Waiting',       accent: 'bg-blue-600 text-white',    tone: 'bg-white border-slate-200 text-slate-700' },
+  converted:  { label: 'Converted',     accent: 'bg-violet-600 text-white',  tone: 'bg-white border-slate-200 text-slate-700' },
+  noEmail:    { label: 'Needs Enrichment', accent: 'bg-rose-600 text-white', tone: 'bg-white border-slate-200 text-slate-700' },
+  all:        { label: 'All Contractors', accent: 'bg-slate-700 text-white', tone: 'bg-white border-slate-200 text-slate-700' },
 };
 const isTestLikeContractor = (c: Partial<Contractor>) => {
   const name = (c.name || '').toLowerCase();
@@ -1727,7 +1727,11 @@ export default function OutreachPage() {
         </div>
       )}
 
-      {/* ── Solid Header ─────────────────────────────────────────────────────── */}
+      {/* ═══════════════════════════════════════════════════════════════════════════
+          SECTION: PAGE_HEADER
+          Dark gradient header with logo, title "PreciseGovCon CRM", and action buttons
+          (Overdue Tasks, Trial Ending, Sync SAM.gov)
+      ═══════════════════════════════════════════════════════════════════════════ */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b-4 border-orange-500">
         <div className="px-8 py-8">
           <div className="flex items-start justify-between">
@@ -1816,7 +1820,11 @@ export default function OutreachPage() {
             </div>
           </div>
 
-          {/* ── Tabs ───────────────────────────────────────────────────────────── */}
+          {/* ═══════════════════════════════════════════════════════════════════════
+              SECTION: MAIN_TAB_BUTTONS  
+              The colorful tab buttons: CRM & Pipeline, Outreach, Opportunities, 
+              Lead Pipeline, Templates, Offer Codes, Sent Emails, Test Data
+          ═══════════════════════════════════════════════════════════════════════ */}
           <div className="flex gap-2 mt-6">
             {([
               {
@@ -1907,31 +1915,37 @@ export default function OutreachPage() {
         {activeTab === 'crm' && (
           <div className="space-y-8">
 
-            {/* KPI Row — colorful like subscriptions */}
-            <div className="grid grid-cols-5 gap-5">
+            {/* ═══════════════════════════════════════════════════════════════════════
+                SECTION: CRM_KPI_CARDS
+                The 5 colorful metric cards: Total Leads, Conversion Rate, Active Trials, 
+                Total Revenue, Email Open Rate
+            ═══════════════════════════════════════════════════════════════════════ */}
+            <div className="grid grid-cols-5 gap-4">
               {[
-                { label: 'Total Leads',    value: pipeline.length,        sub: `+${newThisWeek} this week`,          icon: Users,      gradient: 'from-slate-700 to-slate-800',   iconBg: 'bg-white/20', textColor: 'text-white', subColor: 'text-slate-300' },
-                { label: 'Conversion Rate',value: `${convRate}%`,         sub: 'Pipeline → Converted',               icon: TrendingUp, gradient: 'from-emerald-500 to-emerald-600', iconBg: 'bg-white/20', textColor: 'text-white', subColor: 'text-emerald-100' },
-                { label: 'Active Trials',  value: activeTrials,           sub: `${trialsEndSoon} ending < 3 days`,   icon: Timer,      gradient: 'from-orange-500 to-orange-600',  iconBg: 'bg-white/20', textColor: 'text-white', subColor: 'text-orange-100' },
-                { label: 'Total Revenue',  value: fmtUSD(totalRevenue),   sub: 'Converted contractors',              icon: DollarSign, gradient: 'from-blue-500 to-blue-600',      iconBg: 'bg-white/20', textColor: 'text-white', subColor: 'text-blue-100' },
-                { label: 'Email Open Rate',value: openRate !== null ? `${openRate}%` : '—', sub: replyRate !== null ? `${replyRate}% reply rate` : 'No emails tracked yet', icon: Mail, gradient: 'from-violet-500 to-violet-600', iconBg: 'bg-white/20', textColor: 'text-white', subColor: 'text-violet-100' },
+                { label: 'Total Leads',    value: pipeline.length,        sub: `+${newThisWeek} this week`,          icon: Users,      bg: 'bg-slate-800',   iconBg: 'bg-slate-600' },
+                { label: 'Conversion Rate',value: `${convRate}%`,         sub: 'Pipeline → Converted',               icon: TrendingUp, bg: 'bg-emerald-600', iconBg: 'bg-emerald-700' },
+                { label: 'Active Trials',  value: activeTrials,           sub: `${trialsEndSoon} ending < 3 days`,   icon: Timer,      bg: 'bg-orange-500',  iconBg: 'bg-orange-600' },
+                { label: 'Total Revenue',  value: fmtUSD(totalRevenue),   sub: 'Converted contractors',              icon: DollarSign, bg: 'bg-blue-600',    iconBg: 'bg-blue-700' },
+                { label: 'Email Open Rate',value: openRate !== null ? `${openRate}%` : '—', sub: replyRate !== null ? `${replyRate}% reply rate` : 'No emails tracked yet', icon: Mail, bg: 'bg-violet-600', iconBg: 'bg-violet-700' },
               ].map(k => (
-                <div key={k.label} className={`bg-gradient-to-br ${k.gradient} rounded-2xl px-6 py-5 shadow-lg relative overflow-hidden`}>
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full -translate-y-8 translate-x-8" />
-                  <div className="flex items-center justify-between mb-3">
-                    <div className={`w-10 h-10 rounded-xl ${k.iconBg} flex items-center justify-center backdrop-blur`}>
-                      <k.icon className="w-5 h-5 text-white" />
-                    </div>
-                    <ArrowUp className="w-4 h-4 text-white/40" />
+                <div key={k.label} className={`${k.bg} rounded-2xl px-5 py-4 shadow-lg flex items-center gap-4`}>
+                  <div className={`w-10 h-10 rounded-xl ${k.iconBg} flex items-center justify-center flex-shrink-0`}>
+                    <k.icon className="w-5 h-5 text-white" />
                   </div>
-                  <p className={`text-3xl font-black ${k.textColor} tracking-tight`}>{k.value}</p>
-                  <p className={`text-sm font-semibold ${k.subColor} mt-0.5`}>{k.label}</p>
-                  <p className={`text-xs ${k.subColor} opacity-70 mt-0.5`}>{k.sub}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-2xl font-black text-white tracking-tight">{k.value}</p>
+                    <p className="text-sm font-bold text-white">{k.label}</p>
+                    <p className="text-xs text-white truncate">{k.sub}</p>
+                  </div>
+                  <ArrowUp className="w-4 h-4 text-white flex-shrink-0" />
                 </div>
               ))}
             </div>
 
-            {/* Pipeline — Full-width data table */}
+            {/* ═══════════════════════════════════════════════════════════════════════
+                SECTION: CRM_PIPELINE_TABLE
+                The main data table showing contractors in the pipeline
+            ═══════════════════════════════════════════════════════════════════════ */}
             {(() => {
               const basePipeline = [...pipeline]
                 .filter(c => (
@@ -2795,7 +2809,7 @@ export default function OutreachPage() {
                       isActive ? meta.accent : `${meta.tone} border`
                     }`}
                   >
-                    <p className={`text-[11px] font-black uppercase tracking-wide ${isActive ? 'text-white/80' : ''}`}>{meta.label}</p>
+                    <p className={`text-[11px] font-black uppercase tracking-wide ${isActive ? 'text-white' : 'text-slate-600'}`}>{meta.label}</p>
                     <p className={`text-2xl font-black mt-1 ${isActive ? 'text-white' : 'text-slate-900'}`}>{folderCounts[folder].toLocaleString()}</p>
                   </button>
                 );
@@ -3500,7 +3514,7 @@ export default function OutreachPage() {
         {/* LEAD PIPELINE TAB                                                    */}
         {/* ════════════════════════════════════════════════════════════════════ */}
         {activeTab === 'leadPipeline' && (
-          <div className="space-y-6">
+          <div className="space-y-3">
             {(() => {
               const enrichedCount = pipelineEntities.filter(entity => entity.enrichment?.enrichmentStatus === 'enriched').length;
               const pendingCount = pipelineEntities.filter(entity => entity.enrichment?.enrichmentStatus === 'pending').length;
@@ -3751,28 +3765,18 @@ export default function OutreachPage() {
 
               return (
                 <>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <div>
                       <h2 className="text-3xl md:text-4xl font-black tracking-tight text-slate-900">Daily Lead Pipeline</h2>
-                      {!pipelineHeroCollapsed && (
-                        <div className="flex flex-wrap items-center gap-3 mt-2">
-                          <p className="text-base md:text-lg text-slate-600 font-semibold">Pull companies registered {selectedDaysFrom}-{selectedDaysTo} days ago, enrich weekly using public web and government data, and queue only confirmed emails.</p>
-                          <span className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-bold text-orange-800">
-                            Recommended Order:
-                            <span className="text-slate-900">Ingest {'->'} Enrich {'->'} Score {'->'} Queue</span>
-                          </span>
-                        </div>
-                      )}
+                      <div className="flex flex-wrap items-center gap-3 mt-2">
+                        <p className="text-base md:text-lg text-slate-600 font-semibold">Pull companies registered {selectedDaysFrom}-{selectedDaysTo} days ago, enrich weekly using public web and government data, and queue only confirmed emails.</p>
+                        <span className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-bold text-orange-800">
+                          Recommended Order:
+                          <span className="text-slate-900">Ingest {'->'} Enrich {'->'} Score {'->'} Queue</span>
+                        </span>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => setPipelineHeroCollapsed(!pipelineHeroCollapsed)}
-                      className="p-2 rounded-lg hover:bg-slate-100 transition flex-shrink-0 ml-4"
-                      title={pipelineHeroCollapsed ? 'Show instructions' : 'Hide instructions'}
-                    >
-                      <ChevronDown className={`w-5 h-5 text-slate-500 transition ${pipelineHeroCollapsed ? '-rotate-90' : ''}`} />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <button disabled={pipelineLoading || ingestWindowInvalid} onClick={runDailyFlow} className="px-5 py-3 bg-orange-600 text-white rounded-xl text-base font-black hover:bg-orange-700 disabled:opacity-60 shadow-sm">{pipelineLoading && !pipelineActiveStep ? 'Running...' : 'Run Daily Flow'}</button>
                       <button disabled={pipelineLoading || ingestWindowInvalid} onClick={() => runPipelineStep('ingest')} className="px-5 py-3 bg-slate-900 text-white rounded-xl text-base font-black hover:bg-slate-800 disabled:opacity-60 shadow-sm">{pipelineActiveStep === 'ingest' ? 'Running Ingest...' : 'Run Ingest'}</button>
                       <button disabled={pipelineLoading} onClick={() => runPipelineStep('enrich')} className="px-5 py-3 bg-cyan-600 text-white rounded-xl text-base font-black hover:bg-cyan-700 disabled:opacity-60 shadow-sm">{pipelineActiveStep === 'enrich' ? 'Running Enrich...' : 'Run Enrich'}</button>
@@ -3783,13 +3787,12 @@ export default function OutreachPage() {
                       </button>
                     </div>
 
-                  {!pipelineHeroCollapsed && (
-                    <div className="rounded-2xl border border-orange-200 bg-orange-50 px-5 py-4 shadow-sm">
-                      <div className="flex items-center justify-between gap-4 flex-wrap">
-                        <div>
-                          <p className="text-sm font-black text-orange-900">Ingest Window</p>
-                          <p className="text-xs text-orange-800 mt-1">Older firms often have better public web presence. Try a wider or older range to improve phone and email odds.</p>
-                        </div>
+                  <div className="rounded-2xl border border-orange-200 bg-orange-50 px-5 py-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <div>
+                        <p className="text-sm font-black text-orange-900">Ingest Window</p>
+                        <p className="text-xs text-orange-800 mt-1">Older firms often have better public web presence. Try a wider or older range to improve phone and email odds.</p>
+                      </div>
                       <span className="inline-flex items-center rounded-xl bg-white border border-orange-200 px-3 py-1.5 text-xs font-black text-orange-800">
                         {ingestPresetLabel}
                       </span>
@@ -3844,20 +3847,18 @@ export default function OutreachPage() {
                       </div>
                     </div>
                     <p className={`text-xs mt-3 font-semibold ${ingestWindowInvalid ? 'text-red-600' : 'text-orange-800'}`}>
-                        {ingestWindowInvalid
-                          ? 'Set the newer bound to a smaller number than the older bound.'
-                          : `Current ingest target: companies registered roughly ${selectedDaysFrom} to ${selectedDaysTo} days ago.`}
-                      </p>
-                    </div>
-                  )}
+                      {ingestWindowInvalid
+                        ? 'Set the newer bound to a smaller number than the older bound.'
+                        : `Current ingest target: companies registered roughly ${selectedDaysFrom} to ${selectedDaysTo} days ago.`}
+                    </p>
+                  </div>
 
-                  {!pipelineHeroCollapsed && (
-                    <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-                      <div className="flex items-center gap-2 mb-3">
-                        <FileText className="w-4 h-4 text-slate-500" />
-                        <p className="text-sm font-black text-slate-900">Action Legend</p>
-                      </div>
-                      <p className="text-sm text-slate-600 font-semibold mb-3">Use `Run Daily Flow` when you want the safe default. Use individual buttons only when re-running a specific step.</p>
+                  <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                    <div className="flex items-center gap-2 mb-3">
+                      <FileText className="w-4 h-4 text-slate-500" />
+                      <p className="text-sm font-black text-slate-900">Action Legend</p>
+                    </div>
+                    <p className="text-sm text-slate-600 font-semibold mb-3">Use `Run Daily Flow` when you want the safe default. Use individual buttons only when re-running a specific step.</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
                       {[
                         { label: 'Run Daily Flow', detail: 'Runs ingest, enrich, score, and queue in sequence.' },
@@ -3872,16 +3873,19 @@ export default function OutreachPage() {
                         </div>
                       ))}
                     </div>
-                    </div>
-                  )}
+                  </div>
 
                   {pipelineActiveStep && (
-                    <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-5 py-4">
-                      <p className="text-sm font-black text-cyan-900">Running {pipelineActiveStep}</p>
-                      <p className="text-xs text-cyan-800 mt-1">The pipeline is processing now. Results and updated records will appear below when the step completes.</p>
+                    <div className="rounded-xl border border-cyan-300 bg-cyan-50 px-4 py-3">
+                      <p className="text-sm font-bold text-cyan-900">Running {pipelineActiveStep}... Results will appear below when complete.</p>
                     </div>
                   )}
 
+                  {/* ═══════════════════════════════════════════════════════════════════════
+                      SECTION: LEAD_PIPELINE_STATS_CARDS
+                      The 6 colorful stat cards: Entities Loaded, Enriched, Pending, 
+                      Manual Review, Queued, Approved
+                  ═══════════════════════════════════════════════════════════════════════ */}
                   <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
                     {[ 
                       { label: 'Entities Loaded', value: pipelineEntities.length, tone: 'bg-slate-900 text-white', onClick: () => focusEntityPanel('all') },
@@ -3892,78 +3896,61 @@ export default function OutreachPage() {
                       { label: 'Approved', value: approvedCount, tone: 'bg-violet-600 text-white', onClick: () => focusQueuePanel('approved') },
                     ].map(card => (
                       <button key={card.label} type="button" onClick={card.onClick} className={`rounded-2xl px-5 py-4 shadow-sm text-left transition hover:scale-[1.01] ${card.tone}`}>
-                        <p className="text-sm font-black uppercase tracking-[0.12em] opacity-80">{card.label}</p>
+                        <p className="text-sm font-black uppercase tracking-wide">{card.label}</p>
                         <p className="text-4xl md:text-5xl font-black tracking-tight mt-2">{card.value}</p>
                       </button>
                     ))}
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3">
+                  <details className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <summary className="px-4 py-2.5 cursor-pointer text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
                       <Clock className="w-4 h-4 text-slate-500" />
-                      <p className="text-sm font-black text-slate-900">Action Availability</p>
+                      Action Availability (click to expand)
+                    </summary>
+                    <div className="px-4 pb-3 pt-2">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {actionAvailability.map(item => (
+                          <button
+                            key={item.step}
+                            type="button"
+                            onClick={() => setPipelineLogFocus(item.step)}
+                            className={`rounded-lg border px-4 py-3 text-left transition ${
+                              pipelineLogFocus === item.step
+                                ? 'border-orange-400 bg-orange-50'
+                                : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                            }`}
+                          >
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-600">{item.label}</p>
+                            <p className="text-sm font-bold text-slate-900 mt-1">{fmtDateTime(item.lastRun)}</p>
+                            <p className="text-xs text-slate-600 mt-1 truncate">{item.available}</p>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                      {actionAvailability.map(item => (
-                        <button
-                          key={item.step}
-                          type="button"
-                          onClick={() => setPipelineLogFocus(item.step)}
-                          className={`rounded-xl border px-4 py-3 text-left transition ${
-                            pipelineLogFocus === item.step
-                              ? 'border-orange-300 bg-orange-50 shadow-sm'
-                              : 'border-slate-200 bg-slate-50 hover:border-slate-300'
-                          }`}
-                        >
-                          <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">{item.label}</p>
-                          <p className="text-xs text-slate-500 mt-2">Last run</p>
-                          <p className="text-base font-black text-slate-900 mt-0.5">{fmtDateTime(item.lastRun)}</p>
-                          <p className="text-xs text-slate-500 mt-2">Availability</p>
-                          <p className="text-base font-semibold text-slate-800 mt-0.5 leading-relaxed">{item.available}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  </details>
 
                   {(ingestRun?.status === 'completed' && ingestData) || latestIngestRun ? (
-                    <div className="rounded-2xl border border-violet-200 bg-violet-50 px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-violet-700" />
-                        <p className="text-sm font-black text-violet-900">Weekly Ingest Cadence</p>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
-                        <div className="rounded-xl border border-violet-200 bg-white px-4 py-3">
-                          <p className="text-[11px] font-black uppercase tracking-wide text-violet-500">Last Slice</p>
-                          <p className="text-2xl font-black text-slate-900 mt-1">{currentSlice ?? '—'}</p>
+                    <details className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                      <summary className="px-4 py-2.5 cursor-pointer text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-violet-600" />
+                        Weekly Ingest Cadence — Slice {currentSlice ?? '—'} | Next: {nextSliceLabel}
+                      </summary>
+                      <div className="px-4 pb-3 pt-2">
+                        <div className="flex flex-wrap gap-4 text-sm text-slate-700">
+                          <span><strong className="text-slate-900">Range:</strong> {cadenceWindow?.from || '—'} to {cadenceWindow?.to || '—'}</span>
+                          <span><strong className="text-slate-900">Target:</strong> {typeof persistedParams?.requestedDaysFrom === 'number' && typeof persistedParams?.requestedDaysTo === 'number'
+                            ? `${persistedParams.requestedDaysFrom}-${persistedParams.requestedDaysTo}d ago`
+                            : `${selectedDaysFrom}-${selectedDaysTo}d ago`}</span>
+                          <span><strong className="text-slate-900">Mode:</strong> {String(cadenceMode || 'manual').replaceAll('_', ' ')}</span>
                         </div>
-                        <div className="rounded-xl border border-violet-200 bg-white px-4 py-3">
-                          <p className="text-[11px] font-black uppercase tracking-wide text-violet-500">Range</p>
-                          <p className="text-sm font-bold text-slate-900 mt-1">{cadenceWindow?.from || '—'} to {cadenceWindow?.to || '—'}</p>
-                        </div>
-                        <div className="rounded-xl border border-violet-200 bg-white px-4 py-3">
-                          <p className="text-[11px] font-black uppercase tracking-wide text-violet-500">Target Window</p>
-                          <p className="text-sm font-bold text-slate-900 mt-1">
-                            {typeof persistedParams?.requestedDaysFrom === 'number' && typeof persistedParams?.requestedDaysTo === 'number'
-                              ? `${persistedParams.requestedDaysFrom} to ${persistedParams.requestedDaysTo} days ago`
-                              : `${selectedDaysFrom} to ${selectedDaysTo} days ago`}
+                        {latestIngestRun && (
+                          <p className="text-xs text-slate-600 mt-2">
+                            Last ingest: {new Date(latestIngestRun.startedAt).toLocaleString()}
+                            {latestIngestRun.finishedAt ? ` · finished ${new Date(latestIngestRun.finishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
                           </p>
-                        </div>
-                        <div className="rounded-xl border border-violet-200 bg-white px-4 py-3">
-                          <p className="text-[11px] font-black uppercase tracking-wide text-violet-500">Mode</p>
-                          <p className="text-sm font-bold text-slate-900 mt-1">{String(cadenceMode || 'manual').replaceAll('_', ' ')}</p>
-                        </div>
-                        <div className="rounded-xl border border-violet-200 bg-white px-4 py-3">
-                          <p className="text-[11px] font-black uppercase tracking-wide text-violet-500">Next Run</p>
-                          <p className="text-sm font-bold text-slate-900 mt-1">{nextSliceLabel}</p>
-                        </div>
+                        )}
                       </div>
-                      {latestIngestRun && (
-                        <p className="text-xs text-violet-800 mt-3">
-                          Last successful DB-backed ingest: {new Date(latestIngestRun.startedAt).toLocaleString()}
-                          {latestIngestRun.finishedAt ? ` · finished ${new Date(latestIngestRun.finishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}
-                        </p>
-                      )}
-                    </div>
+                    </details>
                   ) : null}
 
                   {Object.keys(pipelineRunState).length > 0 && (() => {

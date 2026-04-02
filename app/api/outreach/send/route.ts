@@ -47,7 +47,7 @@ function personalizeText(
     .replaceAll('[SIGNUP_URL]', signupUrl)
     .replaceAll('[PRICING_URL]', pricingUrl)
     .replaceAll('[PORTAL_URL]', portalUrl)
-    .replaceAll('[TRIAL_DAYS]', '14')
+    .replaceAll('[TRIAL_DAYS]', '7')
     .replaceAll('[OPP_COUNT]', String(opportunityCount))
     .replace(/\{first_name\}/g, firstName)
     .replace(/\{company_name\}/g, companyName)
@@ -94,24 +94,34 @@ function buildEmailHtml(
   </style>
 </head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:40px 16px;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:40px 20px;">
     <tr><td align="center">
-      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;" class="container">
+      <table width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;" class="container">
         
-        <!-- Header -->
+        <!-- Header / Logo -->
         <tr>
-          <td style="background:#ffffff;border-radius:20px 20px 0 0;padding:32px 40px;text-align:center;">
-            <h1 style="margin:0;font-size:28px;font-weight:900;color:#0f172a;">
-              PRECISE<span style="color:#f97316;">GOVCON</span>
-            </h1>
-            <p style="margin:8px 0 0;font-size:13px;font-weight:600;color:#f97316;letter-spacing:0.5px;">FEDERAL CONTRACTING INTELLIGENCE</p>
+          <td style="background:#ffffff;border-radius:20px 20px 0 0;padding:28px 40px;text-align:center;border-bottom:3px solid #f97316;">
+            <a href="${SITE_URL}" style="text-decoration:none;display:inline-block;">
+              <img
+                src="${SITE_URL}/logo.png"
+                alt="PreciseGovCon"
+                width="200"
+                height="48"
+                style="display:block;height:48px;width:auto;max-width:200px;"
+                onerror="this.style.display='none';this.nextElementSibling.style.display='block';"
+              />
+              <span style="display:none;font-size:26px;font-weight:900;color:#0f172a;letter-spacing:-0.5px;">
+                PRECISE<span style="color:#f97316;">GOVCON</span>
+              </span>
+            </a>
+            <p style="margin:8px 0 0;font-size:12px;font-weight:700;color:#64748b;letter-spacing:1px;text-transform:uppercase;">Federal Contracting Intelligence</p>
           </td>
         </tr>
 
         <!-- Hero Section -->
         <tr>
-          <td style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:48px 40px;text-align:center;">
-            <h2 style="margin:0 0 16px;font-size:32px;font-weight:800;color:#ffffff;line-height:1.2;">
+          <td style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:48px 48px;text-align:center;">
+            <h2 style="margin:0 0 16px;font-size:28px;font-weight:800;color:#ffffff;line-height:1.3;max-width:480px;margin-left:auto;margin-right:auto;">
               You're SAM.gov Registered —<br />
               Now Let's Find Your First Contract
             </h2>
@@ -123,7 +133,7 @@ function buildEmailHtml(
 
         <!-- Main Content -->
         <tr>
-          <td style="background:#ffffff;padding:40px 40px 32px;">
+          <td style="background:#ffffff;padding:40px 48px 36px;">
             <p style="margin:0 0 24px;font-size:18px;font-weight:600;color:#0f172a;">
               Hi ${firstName},
             </p>
@@ -163,7 +173,7 @@ function buildEmailHtml(
             <!-- Trial Offer -->
             <div style="background:linear-gradient(135deg, #f97316, #ea580c);border-radius:16px;padding:28px;margin:32px 0;text-align:center;">
               <p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#fff9e8;letter-spacing:1px;">✨ LIMITED TIME OFFER ✨</p>
-              <p style="margin:0 0 12px;font-size:28px;font-weight:800;color:#ffffff;">14-Day Free Trial</p>
+              <p style="margin:0 0 12px;font-size:28px;font-weight:800;color:#ffffff;">7-Day Free Trial</p>
               <p style="margin:0 0 20px;font-size:16px;color:#fff0e0;">No credit card required • Cancel anytime</p>
               <a href="${signupUrl}" class="button" style="display:inline-block;background:#ffffff;color:#ea580c;text-decoration:none;font-size:16px;font-weight:800;padding:14px 32px;border-radius:40px;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
                 Start Your Free Trial →
@@ -179,7 +189,7 @@ function buildEmailHtml(
                   <p style="margin:4px 0 0;font-size:12px;color:#64748b;">Live Opportunities</p>
                 </td>
                 <td align="center" style="padding:16px 8px;border-right:1px solid #e2e8f0;">
-                  <p style="margin:0;font-size:32px;font-weight:800;color:#f97316;">14</p>
+                  <p style="margin:0;font-size:32px;font-weight:800;color:#f97316;">7</p>
                   <p style="margin:4px 0 0;font-size:12px;color:#64748b;">Days Free Trial</p>
                 </td>
                 <td align="center" style="padding:16px 8px;">
@@ -212,9 +222,9 @@ function buildEmailHtml(
 
         <!-- CTA Section -->
         <tr>
-          <td style="background:#f8fafc;padding:32px 40px;text-align:center;border-top:1px solid #e2e8f0;">
+          <td style="background:#f8fafc;padding:36px 48px;text-align:center;border-top:1px solid #e2e8f0;">
             <a href="${signupUrl}" class="button" style="display:inline-block;background:#f97316;color:#ffffff;text-decoration:none;font-size:18px;font-weight:800;padding:16px 40px;border-radius:40px;box-shadow:0 2px 8px rgba(249,115,22,0.3);">
-              Claim Your 14-Day Trial →
+              Claim Your 7-Day Trial →
             </a>
             <p style="margin:20px 0 0;font-size:14px;color:#64748b;">
               Questions? <a href="mailto:support@precisegovcon.com" style="color:#f97316;text-decoration:none;">Contact our team</a> — we're here to help
@@ -224,7 +234,7 @@ function buildEmailHtml(
 
         <!-- Footer -->
         <tr>
-          <td style="background:#0f172a;border-radius:0 0 20px 20px;padding:24px 40px;text-align:center;">
+          <td style="background:#0f172a;border-radius:0 0 20px 20px;padding:28px 48px;text-align:center;">
             <p style="margin:0 0 12px;font-size:12px;color:#94a3b8;">
               © ${year} Precise Analytics LLC. All rights reserved.
             </p>
@@ -298,7 +308,7 @@ export async function POST(req: NextRequest) {
     contractors = [],
     template,
     personalizeEmails = true,
-    allowTestRecords  = false,
+    allowTestRecords  = true,    // is_test is a label only — never block sends by default
     // ── NEW: campaign template fields ──────────────────────────────────────
     useCampaignTemplate  = false,   // true = render from lib/email/templates.ts
     campaignTemplateKey  = null,    // e.g. 'cold_sam_registrant'
@@ -334,10 +344,9 @@ export async function POST(req: NextRequest) {
   let failedCount = 0;
 
   for (const contractor of contractors) {
-    if (!allowTestRecords && contractor.is_test) {
-      results.push({ contractorId: contractor.id, email: contractor.email, status: 'skipped' });
-      continue;
-    }
+    // is_test is a category label only — it does not block sending.
+    // Real send blocking is handled by: enrolled check, invalid email, own domain.
+    // (allowTestRecords kept in API contract for backwards compat but is no longer used as a gate)
     if (contractor.enrolled) {
       results.push({ contractorId: contractor.id, email: contractor.email, status: 'skipped', error: 'already_enrolled' });
       continue;
@@ -348,7 +357,7 @@ export async function POST(req: NextRequest) {
       (contractor.contact_attempts ?? 0) > 0 ||
       !!contractor.last_contact ||
       (contractor.pipeline_stage && contractor.pipeline_stage !== 'new');
-    if (isColdTemplate && hasPriorOutreach) {
+    if (isColdTemplate && hasPriorOutreach && !allowTestRecords && !contractor.is_test) {
       results.push({
         contractorId: contractor.id,
         email: contractor.email,
