@@ -3514,7 +3514,7 @@ export default function OutreachPage() {
         {/* LEAD PIPELINE TAB                                                    */}
         {/* ════════════════════════════════════════════════════════════════════ */}
         {activeTab === 'leadPipeline' && (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {(() => {
               const enrichedCount = pipelineEntities.filter(entity => entity.enrichment?.enrichmentStatus === 'enriched').length;
               const pendingCount = pipelineEntities.filter(entity => entity.enrichment?.enrichmentStatus === 'pending').length;
@@ -3767,38 +3767,38 @@ export default function OutreachPage() {
                 <>
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-3xl md:text-4xl font-black tracking-tight text-slate-900">Daily Lead Pipeline</h2>
-                      <div className="flex flex-wrap items-center gap-3 mt-2">
-                        <p className="text-base md:text-lg text-slate-600 font-semibold">Pull companies registered {selectedDaysFrom}-{selectedDaysTo} days ago, enrich weekly using public web and government data, and queue only confirmed emails.</p>
-                        <span className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-bold text-orange-800">
+                      <h2 className="text-2xl font-black tracking-tight text-slate-900">Daily Lead Pipeline</h2>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <p className="text-sm text-slate-600">Pull companies registered {selectedDaysFrom}-{selectedDaysTo} days ago, enrich weekly using public web and government data, and queue only confirmed emails.</p>
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-bold text-orange-800">
                           Recommended Order:
                           <span className="text-slate-900">Ingest {'->'} Enrich {'->'} Score {'->'} Queue</span>
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button disabled={pipelineLoading || ingestWindowInvalid} onClick={runDailyFlow} className="px-5 py-3 bg-orange-600 text-white rounded-xl text-base font-black hover:bg-orange-700 disabled:opacity-60 shadow-sm">{pipelineLoading && !pipelineActiveStep ? 'Running...' : 'Run Daily Flow'}</button>
-                      <button disabled={pipelineLoading || ingestWindowInvalid} onClick={() => runPipelineStep('ingest')} className="px-5 py-3 bg-slate-900 text-white rounded-xl text-base font-black hover:bg-slate-800 disabled:opacity-60 shadow-sm">{pipelineActiveStep === 'ingest' ? 'Running Ingest...' : 'Run Ingest'}</button>
-                      <button disabled={pipelineLoading} onClick={() => runPipelineStep('enrich')} className="px-5 py-3 bg-cyan-600 text-white rounded-xl text-base font-black hover:bg-cyan-700 disabled:opacity-60 shadow-sm">{pipelineActiveStep === 'enrich' ? 'Running Enrich...' : 'Run Enrich'}</button>
-                      <button disabled={pipelineLoading} onClick={() => runPipelineStep('score')} className="px-5 py-3 bg-violet-600 text-white rounded-xl text-base font-black hover:bg-violet-700 disabled:opacity-60 shadow-sm">{pipelineActiveStep === 'score' ? 'Running Score...' : 'Run Score'}</button>
-                      <button disabled={pipelineLoading} onClick={() => runPipelineStep('queue')} className="px-5 py-3 bg-emerald-600 text-white rounded-xl text-base font-black hover:bg-emerald-700 disabled:opacity-60 shadow-sm">{pipelineActiveStep === 'queue' ? 'Running Queue...' : 'Run Queue'}</button>
-                      <button onClick={fetchLeadPipeline} className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">
-                        <RefreshCw className={`w-4 h-4 text-slate-500 ${pipelineLoading ? 'animate-spin' : ''}`} />
+                    <div className="flex items-center gap-1.5">
+                      <button disabled={pipelineLoading || ingestWindowInvalid} onClick={runDailyFlow} className="px-3 py-2 bg-orange-600 text-white rounded-lg text-xs font-bold hover:bg-orange-700 disabled:opacity-60">{pipelineLoading && !pipelineActiveStep ? 'Running...' : 'Run Daily Flow'}</button>
+                      <button disabled={pipelineLoading || ingestWindowInvalid} onClick={() => runPipelineStep('ingest')} className="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 disabled:opacity-60">{pipelineActiveStep === 'ingest' ? 'Running...' : 'Run Ingest'}</button>
+                      <button disabled={pipelineLoading} onClick={() => runPipelineStep('enrich')} className="px-3 py-2 bg-cyan-600 text-white rounded-lg text-xs font-bold hover:bg-cyan-700 disabled:opacity-60">{pipelineActiveStep === 'enrich' ? 'Running...' : 'Run Enrich'}</button>
+                      <button disabled={pipelineLoading} onClick={() => runPipelineStep('score')} className="px-3 py-2 bg-violet-600 text-white rounded-lg text-xs font-bold hover:bg-violet-700 disabled:opacity-60">{pipelineActiveStep === 'score' ? 'Running...' : 'Run Score'}</button>
+                      <button disabled={pipelineLoading} onClick={() => runPipelineStep('queue')} className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 disabled:opacity-60">{pipelineActiveStep === 'queue' ? 'Running...' : 'Run Queue'}</button>
+                      <button onClick={fetchLeadPipeline} className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50">
+                        <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${pipelineLoading ? 'animate-spin' : ''}`} />
                       </button>
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-orange-200 bg-orange-50 px-5 py-4 shadow-sm">
+                  <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
                     <div className="flex items-center justify-between gap-4 flex-wrap">
-                      <div>
-                        <p className="text-sm font-black text-orange-900">Ingest Window</p>
-                        <p className="text-xs text-orange-800 mt-1">Older firms often have better public web presence. Try a wider or older range to improve phone and email odds.</p>
+                      <div className="flex items-center gap-3">
+                        <p className="text-xs font-black text-orange-900">Ingest Window</p>
+                        <p className="text-xs text-orange-700">Older firms often have better public web presence. Try a wider or older range to improve phone and email odds.</p>
                       </div>
-                      <span className="inline-flex items-center rounded-xl bg-white border border-orange-200 px-3 py-1.5 text-xs font-black text-orange-800">
+                      <span className="inline-flex items-center rounded-lg bg-white border border-orange-200 px-2 py-1 text-xs font-bold text-orange-800">
                         {ingestPresetLabel}
                       </span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
+                    <div className="grid grid-cols-4 gap-2 mt-3">
                       {[
                         { label: 'Fresh', daysFrom: '30', daysTo: '180' },
                         { label: 'Contact-Ready', daysFrom: '90', daysTo: '365' },
@@ -3811,56 +3811,56 @@ export default function OutreachPage() {
                             setIngestDaysFrom(preset.daysFrom);
                             setIngestDaysTo(preset.daysTo);
                           }}
-                          className={`rounded-xl px-4 py-3 text-left border transition ${
+                          className={`rounded-lg px-3 py-2 text-left border transition ${
                             ingestDaysFrom === preset.daysFrom && ingestDaysTo === preset.daysTo
                               ? 'border-orange-400 bg-white shadow-sm'
                               : 'border-orange-200 bg-orange-50 hover:bg-white'
                           }`}
                         >
-                          <p className="text-xs font-black uppercase tracking-[0.14em] text-orange-700">{preset.label}</p>
-                          <p className="text-sm font-semibold text-slate-800 mt-1">{preset.daysFrom} to {preset.daysTo} days ago</p>
+                          <p className="text-[10px] font-black uppercase tracking-wide text-orange-700">{preset.label}</p>
+                          <p className="text-xs font-semibold text-slate-800 mt-0.5">{preset.daysFrom} to {preset.daysTo} days ago</p>
                         </button>
                       ))}
-                      <div className="rounded-xl border border-orange-200 bg-white px-4 py-3">
-                        <p className="text-xs font-black uppercase tracking-[0.14em] text-orange-700">Custom</p>
-                        <div className="grid grid-cols-2 gap-2 mt-2">
-                          <label className="text-xs font-semibold text-slate-600">
+                      <div className="rounded-lg border border-orange-200 bg-white px-3 py-2">
+                        <p className="text-[10px] font-black uppercase tracking-wide text-orange-700">Custom</p>
+                        <div className="grid grid-cols-2 gap-1.5 mt-1">
+                          <label className="text-[10px] font-semibold text-slate-600">
                             Newer
                             <input
                               type="number"
                               min={0}
                               value={ingestDaysFrom}
                               onChange={e => setIngestDaysFrom(e.target.value)}
-                              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900"
+                              className="mt-0.5 w-full rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-900"
                             />
                           </label>
-                          <label className="text-xs font-semibold text-slate-600">
+                          <label className="text-[10px] font-semibold text-slate-600">
                             Older
                             <input
                               type="number"
                               min={1}
                               value={ingestDaysTo}
                               onChange={e => setIngestDaysTo(e.target.value)}
-                              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900"
+                              className="mt-0.5 w-full rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-900"
                             />
                           </label>
                         </div>
                       </div>
                     </div>
-                    <p className={`text-xs mt-3 font-semibold ${ingestWindowInvalid ? 'text-red-600' : 'text-orange-800'}`}>
+                    <p className={`text-[10px] mt-2 font-semibold ${ingestWindowInvalid ? 'text-red-600' : 'text-orange-800'}`}>
                       {ingestWindowInvalid
                         ? 'Set the newer bound to a smaller number than the older bound.'
                         : `Current ingest target: companies registered roughly ${selectedDaysFrom} to ${selectedDaysTo} days ago.`}
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3">
-                      <FileText className="w-4 h-4 text-slate-500" />
-                      <p className="text-sm font-black text-slate-900">Action Legend</p>
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-2.5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="w-3.5 h-3.5 text-slate-400" />
+                      <p className="text-xs font-bold text-slate-700">Action Legend</p>
+                      <span className="text-xs text-slate-500">— Use `Run Daily Flow` for the safe default. Use individual buttons only when re-running a specific step.</span>
                     </div>
-                    <p className="text-sm text-slate-600 font-semibold mb-3">Use `Run Daily Flow` when you want the safe default. Use individual buttons only when re-running a specific step.</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-5 gap-2">
                       {[
                         { label: 'Run Daily Flow', detail: 'Runs ingest, enrich, score, and queue in sequence.' },
                         { label: 'Run Ingest', detail: 'Pulls SAM entities into the lead pipeline.' },
@@ -3868,9 +3868,9 @@ export default function OutreachPage() {
                         { label: 'Run Score', detail: 'Ranks leads by fit, recency, and contactability.' },
                         { label: 'Run Queue', detail: 'Moves qualified leads into outreach review.' },
                       ].map(item => (
-                        <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">{item.label}</p>
-                          <p className="text-base font-semibold text-slate-800 mt-2 leading-relaxed">{item.detail}</p>
+                        <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                          <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{item.label}</p>
+                          <p className="text-xs font-medium text-slate-700 mt-1 leading-snug">{item.detail}</p>
                         </div>
                       ))}
                     </div>
@@ -3887,18 +3887,18 @@ export default function OutreachPage() {
                       The 6 colorful stat cards: Entities Loaded, Enriched, Pending, 
                       Manual Review, Queued, Approved
                   ═══════════════════════════════════════════════════════════════════════ */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                     {[ 
-                      { label: 'Entities Loaded', value: pipelineEntities.length, tone: 'bg-slate-900 text-white', onClick: () => focusEntityPanel('all') },
-                      { label: 'Enriched', value: enrichedCount, tone: 'bg-emerald-600 text-white', onClick: () => focusEntityPanel('enriched') },
-                      { label: 'Pending', value: pendingCount, tone: 'bg-amber-500 text-white', onClick: () => focusEntityPanel('pending') },
-                      { label: 'Manual Review', value: manualReviewCount, tone: 'bg-rose-600 text-white', onClick: () => focusEntityPanel('manual_review') },
-                      { label: 'Queued', value: queuedCount, tone: 'bg-blue-600 text-white', onClick: () => focusQueuePanel('queued') },
-                      { label: 'Approved', value: approvedCount, tone: 'bg-violet-600 text-white', onClick: () => focusQueuePanel('approved') },
+                      { label: 'Entities Loaded', value: pipelineEntities.length, tone: 'bg-slate-900', onClick: () => focusEntityPanel('all') },
+                      { label: 'Enriched', value: enrichedCount, tone: 'bg-emerald-600', onClick: () => focusEntityPanel('enriched') },
+                      { label: 'Pending', value: pendingCount, tone: 'bg-amber-500', onClick: () => focusEntityPanel('pending') },
+                      { label: 'Manual Review', value: manualReviewCount, tone: 'bg-rose-600', onClick: () => focusEntityPanel('manual_review') },
+                      { label: 'Queued', value: queuedCount, tone: 'bg-cyan-600', onClick: () => focusQueuePanel('queued') },
+                      { label: 'Approved', value: approvedCount, tone: 'bg-orange-500', onClick: () => focusQueuePanel('approved') },
                     ].map(card => (
-                      <button key={card.label} type="button" onClick={card.onClick} className={`rounded-2xl px-5 py-4 shadow-sm text-left transition hover:scale-[1.01] ${card.tone}`}>
-                        <p className="text-sm font-black uppercase tracking-wide">{card.label}</p>
-                        <p className="text-4xl md:text-5xl font-black tracking-tight mt-2">{card.value}</p>
+                      <button key={card.label} type="button" onClick={card.onClick} className={`rounded-xl px-3 py-2.5 text-left transition hover:opacity-90 ${card.tone}`}>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-white/80">{card.label}</p>
+                        <p className="text-2xl font-black tracking-tight text-white">{card.value}</p>
                       </button>
                     ))}
                   </div>
