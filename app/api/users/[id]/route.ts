@@ -14,6 +14,7 @@ const updateUserSchema = z.object({
   lastName:     z.string().optional(),
   company:      z.string().optional(),
   phone:        z.string().optional(),
+  jobTitle:     z.string().optional(),
   plan_tier:    z.string().optional(),
   plan_status:  z.string().optional(),
   is_active:    z.boolean().optional(),
@@ -120,10 +121,11 @@ export async function GET(
         id:                     true,
         email:                  true,
         name:                   true,
-        firstName:              true,
-        lastName:               true,
+        first_name:             true,
+        last_name:              true,
         company:                true,
         phone:                  true,
+        title:                  true,
         plan:                   true,
         plan_tier:              true,
         plan_status:            true,
@@ -145,15 +147,15 @@ export async function GET(
 
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    // Return shape expected by your UI (`user_role`)
+    // Map snake_case DB fields to camelCase for frontend + include user_role
     const payload = {
       ...user,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      jobTitle: user.title,
+      offerCode: null,
       user_role: normalizeRole(user.role),
     };
-
-    // Avoid leaking DB-only name if your UI doesn't need it
-    // (Keeping role in payload is harmless, but optional)
-    // delete (payload as any).role;
 
     return NextResponse.json({ user: payload });
   } catch (error: any) {
@@ -194,10 +196,11 @@ export async function PATCH(
         id:           true,
         email:        true,
         name:         true,
-        firstName:    true,
-        lastName:     true,
+        first_name:   true,
+        last_name:    true,
         company:      true,
         phone:        true,
+        title:        true,
         plan_tier:    true,
         plan_status:  true,
         is_active:    true,
@@ -211,11 +214,23 @@ export async function PATCH(
     if (!currentUser) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     // Map API field -> DB field
-    const updates: any = { ...input };
-    if (updates.user_role !== undefined) {
-      updates.role = updates.user_role;
-      delete updates.user_role;
-    }
+    const updates: any = {};
+    
+    // Direct mappings (same name)
+    if (input.email !== undefined) updates.email = input.email;
+    if (input.name !== undefined) updates.name = input.name;
+    if (input.company !== undefined) updates.company = input.company;
+    if (input.phone !== undefined) updates.phone = input.phone;
+    if (input.plan_tier !== undefined) updates.plan_tier = input.plan_tier;
+    if (input.plan_status !== undefined) updates.plan_status = input.plan_status;
+    if (input.is_active !== undefined) updates.is_active = input.is_active;
+    if (input.is_suspended !== undefined) updates.is_suspended = input.is_suspended;
+    
+    // camelCase -> snake_case mappings
+    if (input.firstName !== undefined) updates.first_name = input.firstName;
+    if (input.lastName !== undefined) updates.last_name = input.lastName;
+    if (input.jobTitle !== undefined) updates.title = input.jobTitle;
+    if (input.user_role !== undefined) updates.role = input.user_role;
 
     const updatedUser = await prisma.user.update({
       where: { id: params.id },
@@ -224,10 +239,11 @@ export async function PATCH(
         id:                     true,
         email:                  true,
         name:                   true,
-        firstName:              true,
-        lastName:               true,
+        first_name:             true,
+        last_name:              true,
         company:                true,
         phone:                  true,
+        title:                  true,
         plan:                   true,
         plan_tier:              true,
         plan_status:            true,
@@ -323,9 +339,13 @@ export async function PATCH(
       }
     }
 
-    // Return payload expected by UI
+    // Return payload expected by UI (camelCase)
     const payload = {
       ...updatedUser,
+      firstName: updatedUser.first_name,
+      lastName: updatedUser.last_name,
+      jobTitle: updatedUser.title,
+      offerCode: null,
       user_role: newRoleNormalized,
     };
 
